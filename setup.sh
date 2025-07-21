@@ -10,8 +10,8 @@ echo "====================================="
 
 # Check Python version
 echo "📋 Checking Python version..."
-if ! python3 --version | grep -E "3\.(8|9|10|11|12|13)" > /dev/null; then
-    echo "❌ Error: Python 3.8+ is required"
+if ! python3 --version | grep -E "3\.(10|11|12|13)" > /dev/null; then
+    echo "❌ Error: Python 3.10+ is required"
     echo "   Current version: $(python3 --version)"
     exit 1
 fi
@@ -75,7 +75,7 @@ echo "📝 Next steps:"
 echo "   1. Edit config.yaml to choose your embedding provider"
 echo "   2. Start required services (if using Ollama/local Qdrant):"
 echo "      - Ollama: 'ollama serve'"
-echo "      - Qdrant: 'qdrant'"
+echo "      - Qdrant (Docker): 'docker run -d --name qdrant -p 6333:6333 -p 6334:6334 -v \$(pwd)/qdrant_storage:/qdrant/storage:z qdrant/qdrant'"
 echo "   3. Test connections: 'python3 ingest.py test-connections'"
 echo "   4. Add documents to ./documents/ folder"
 echo "   5. Index documents: 'python3 ingest.py reindex-all'"

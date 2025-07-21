@@ -1,7 +1,6 @@
-import os
 import logging
 from pathlib import Path
-from typing import List, Dict, Any, Optional
+from typing import List
 from dataclasses import dataclass
 from datetime import datetime
 import hashlib
@@ -37,7 +36,7 @@ class DocumentChunk:
 
 class DocumentProcessor:
     """Handles document processing and text extraction."""
-    
+
     def __init__(self, config: DocumentsConfig):
         self.config = config
         self.text_splitter = RecursiveCharacterTextSplitter(
@@ -47,23 +46,23 @@ class DocumentProcessor:
         )
         self.markitdown = MarkItDown()
         self.logger = logging.getLogger(__name__)
-    
+
     def get_supported_files(self) -> List[Path]:
         """Get all supported files from the documents folder."""
         folder_path = Path(self.config.folder_path)
         if not folder_path.exists():
             raise FileNotFoundError(f"Documents folder not found: {folder_path}")
-        
+
         supported_files = []
         for ext in self.config.supported_extensions:
             supported_files.extend(folder_path.glob(f"**/*{ext}"))
-        
+
         return sorted(supported_files)
-    
+
     def extract_text_from_file(self, file_path: Path) -> str:
         """Extract text from a file and convert to markdown."""
         extension = file_path.suffix.lower()
-        
+
         try:
             if extension == '.txt':
                 return self._extract_from_txt(file_path)
@@ -77,21 +76,21 @@ class DocumentProcessor:
                 return self._extract_from_html(file_path)
             else:
                 raise ValueError(f"Unsupported file extension: {extension}")
-        
+
         except Exception as e:
             self.logger.error(f"Error extracting text from {file_path}: {e}")
             raise
-    
+
     def _extract_from_txt(self, file_path: Path) -> str:
         """Extract text from a .txt file."""
         with open(file_path, 'r', encoding='utf-8') as f:
             return f.read()
-    
+
     def _extract_from_docx(self, file_path: Path) -> str:
         """Extract text from a .docx file and convert to markdown using MarkItDown."""
         result = self.markitdown.convert(str(file_path))
         return result.text_content
-    
+
     def _extract_from_pdf(self, file_path: Path) -> str:
         """Extract text from a .pdf file using MarkItDown."""
         try:
@@ -106,17 +105,17 @@ class DocumentProcessor:
                 for page in reader.pages:
                     text_content.append(page.extract_text())
             return '\n\n'.join(text_content)
-    
+
     def _extract_from_markdown(self, file_path: Path) -> str:
         """Extract text from a .md file (already in markdown format)."""
         with open(file_path, 'r', encoding='utf-8') as f:
             return f.read()
-    
+
     def _extract_from_html(self, file_path: Path) -> str:
         """Extract text from an .html file and convert to markdown."""
         with open(file_path, 'r', encoding='utf-8') as f:
             html_content = f.read()
-        
+
         # Convert HTML to markdown using html-to-markdown
         markdown_content = convert_to_markdown(
             html_content,
@@ -126,12 +125,12 @@ class DocumentProcessor:
             heading_style='atx'  # Use # style headings
         )
         return markdown_content
-    
+
     def create_document_metadata(self, file_path: Path, content: str) -> DocumentMetadata:
         """Create metadata for a document."""
         stat = file_path.stat()
         content_hash = hashlib.sha256(content.encode('utf-8')).hexdigest()
-        
+
         return DocumentMetadata(
             file_path=str(file_path.relative_to(self.config.folder_path)),
             filename=file_path.name,
@@ -140,19 +139,19 @@ class DocumentProcessor:
             last_modified=datetime.fromtimestamp(stat.st_mtime),
             content_hash=content_hash
         )
-    
+
     def process_document(self, file_path: Path) -> List[DocumentChunk]:
         """Process a document and return chunks with metadata."""
         try:
             # Extract text and convert to markdown
             original_text = self.extract_text_from_file(file_path)
-            
+
             # Create metadata
             metadata = self.create_document_metadata(file_path, original_text)
-            
+
             # Split into chunks
             chunks = self.text_splitter.split_text(original_text)
-            
+
             # Create DocumentChunk objects
             document_chunks = []
             for i, chunk_text in enumerate(chunks):
@@ -165,19 +164,19 @@ class DocumentProcessor:
                     chunk_index=i,
                     chunk_id=chunk_id
                 ))
-            
+
             self.logger.info(f"Processed {file_path.name}: {len(chunks)} chunks")
             return document_chunks
-            
+
         except Exception as e:
             self.logger.error(f"Failed to process {file_path}: {e}")
             raise
-    
+
     def process_all_documents(self) -> List[DocumentChunk]:
         """Process all supported documents in the folder."""
         files = self.get_supported_files()
         all_chunks = []
-        
+
         for file_path in files:
             try:
                 chunks = self.process_document(file_path)
@@ -185,5 +184,5 @@ class DocumentProcessor:
             except Exception as e:
                 self.logger.error(f"Skipping {file_path} due to error: {e}")
                 continue
-        
+
         return all_chunks

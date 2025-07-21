@@ -63,6 +63,7 @@ documents/
 *.db
 *.sqlite
 models/
+qdrant_storage/
 
 # Environment variables
 .env

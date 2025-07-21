@@ -1,55 +1,54 @@
 from abc import ABC, abstractmethod
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any, Optional
 import logging
 import os
-from dataclasses import asdict
 from .config import VectorDBConfig
 from .document_processor import DocumentChunk
 
 
 class VectorStore(ABC):
     """Abstract base class for vector stores."""
-    
+
     @abstractmethod
     def create_collection(self, dimension: int) -> bool:
         """Create a collection with the specified dimension."""
         pass
-    
+
     @abstractmethod
     def collection_exists(self) -> bool:
         """Check if the collection exists."""
         pass
-    
+
     @abstractmethod
     def get_collection_info(self) -> Optional[Dict[str, Any]]:
         """Get information about the collection."""
         pass
-    
+
     @abstractmethod
     def insert_documents(self, chunks: List[DocumentChunk], embeddings: List[List[float]]) -> bool:
         """Insert document chunks with their embeddings."""
         pass
-    
+
     @abstractmethod
     def search(self, query_embedding: List[float], limit: int = 10) -> List[Dict[str, Any]]:
         """Search for similar documents."""
         pass
-    
+
     @abstractmethod
     def delete_document(self, document_path: str) -> bool:
         """Delete all chunks for a specific document."""
         pass
-    
+
     @abstractmethod
     def clear_all(self) -> bool:
         """Clear all documents from the collection."""
         pass
-    
+
     @abstractmethod
     def get_stats(self) -> Dict[str, Any]:
         """Get collection statistics."""
         pass
-    
+
     @abstractmethod
     def test_connection(self) -> bool:
         """Test if the vector store is accessible."""
@@ -58,35 +57,35 @@ class VectorStore(ABC):
 
 class QdrantVectorStore(VectorStore):
     """Qdrant vector store implementation supporting both local and cloud instances."""
-    
+
     def __init__(self, config: VectorDBConfig):
         self.config = config
         self.logger = logging.getLogger(__name__)
-        
+
         try:
             from qdrant_client import QdrantClient
         except ImportError:
             raise ImportError("qdrant-client library is required. Install with: pip install qdrant-client")
-        
+
         # Initialize client based on configuration
         if config.url:
             # Cloud Qdrant
             api_key = config.api_key or os.getenv('QDRANT_API_KEY')
             if not api_key:
                 raise ValueError("Qdrant Cloud API key is required. Set it in config or QDRANT_API_KEY env var")
-            
+
             self.client = QdrantClient(url=config.url, api_key=api_key)
             self.logger.info(f"Using Qdrant Cloud: {config.url}")
         else:
             # Local Qdrant
             self.client = QdrantClient(host=config.host, port=config.port)
             self.logger.info(f"Using local Qdrant: {config.host}:{config.port}")
-    
+
     def create_collection(self, dimension: int) -> bool:
         """Create a Qdrant collection with the specified dimension."""
         try:
             from qdrant_client.models import Distance, VectorParams
-            
+
             # Map distance metric
             distance_map = {
                 "cosine": Distance.COSINE,
@@ -94,28 +93,28 @@ class QdrantVectorStore(VectorStore):
                 "dot": Distance.DOT
             }
             distance = distance_map.get(self.config.distance_metric.lower(), Distance.COSINE)
-            
+
             # Check if collection exists
             collections = self.client.get_collections().collections
             existing_names = [col.name for col in collections]
-            
+
             if self.config.collection_name in existing_names:
                 self.logger.info(f"Collection '{self.config.collection_name}' already exists")
                 return True
-            
+
             # Create collection
             self.client.create_collection(
                 collection_name=self.config.collection_name,
                 vectors_config=VectorParams(size=dimension, distance=distance)
             )
-            
+
             self.logger.info(f"Collection '{self.config.collection_name}' created successfully")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"Error creating collection: {e}")
             return False
-    
+
     def collection_exists(self) -> bool:
         """Check if the Qdrant collection exists."""
         try:
@@ -124,7 +123,7 @@ class QdrantVectorStore(VectorStore):
         except Exception as e:
             self.logger.error(f"Error checking collection existence: {e}")
             return False
-    
+
     def get_collection_info(self) -> Optional[Dict[str, Any]]:
         """Get information about the Qdrant collection."""
         try:
@@ -147,15 +146,15 @@ class QdrantVectorStore(VectorStore):
         except Exception as e:
             self.logger.error(f"Error getting collection info: {e}")
             return None
-    
+
     def insert_documents(self, chunks: List[DocumentChunk], embeddings: List[List[float]]) -> bool:
         """Insert document chunks with their embeddings into Qdrant."""
         if len(chunks) != len(embeddings):
             raise ValueError("Number of chunks must match number of embeddings")
-        
+
         try:
             from qdrant_client.models import PointStruct
-            
+
             # Prepare points for insertion
             points = []
             for chunk, embedding in zip(chunks, embeddings):
@@ -170,27 +169,27 @@ class QdrantVectorStore(VectorStore):
                     "content_hash": chunk.metadata.content_hash,
                     "chunk_index": chunk.chunk_index
                 }
-                
+
                 point = PointStruct(
                     id=chunk.chunk_id,
                     vector=embedding,
                     payload=payload
                 )
                 points.append(point)
-            
+
             # Insert points
             self.client.upsert(
                 collection_name=self.config.collection_name,
                 points=points
             )
-            
+
             self.logger.info(f"Inserted {len(chunks)} chunks successfully")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"Error inserting documents: {e}")
             return False
-    
+
     def search(self, query_embedding: List[float], limit: int = 10) -> List[Dict[str, Any]]:
         """Search for similar documents in Qdrant."""
         try:
@@ -200,7 +199,7 @@ class QdrantVectorStore(VectorStore):
                 limit=limit,
                 with_payload=True
             )
-            
+
             # Convert to format compatible with REST API
             results = []
             for hit in search_results:
@@ -210,16 +209,16 @@ class QdrantVectorStore(VectorStore):
                     "payload": hit.payload
                 })
             return results
-            
+
         except Exception as e:
             self.logger.error(f"Error searching documents: {e}")
             return []
-    
+
     def delete_document(self, document_path: str) -> bool:
         """Delete all chunks for a specific document from Qdrant."""
         try:
             from qdrant_client.models import Filter, FieldCondition, MatchValue
-            
+
             # Delete points with matching file_path
             self.client.delete(
                 collection_name=self.config.collection_name,
@@ -232,14 +231,14 @@ class QdrantVectorStore(VectorStore):
                     ]
                 )
             )
-            
+
             self.logger.info(f"Deleted chunks for document: {document_path}")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"Error deleting document: {e}")
             return False
-    
+
     def clear_all(self) -> bool:
         """Clear all documents from the Qdrant collection."""
         try:
@@ -247,17 +246,17 @@ class QdrantVectorStore(VectorStore):
             self.client.delete_collection(self.config.collection_name)
             self.logger.info(f"Collection '{self.config.collection_name}' cleared")
             return True
-            
+
         except Exception as e:
             # Collection might not exist, which is fine
             self.logger.info(f"Collection '{self.config.collection_name}' cleared (or didn't exist)")
             return True
-    
+
     def get_stats(self) -> Dict[str, Any]:
         """Get statistics about the Qdrant collection."""
         try:
             info = self.client.get_collection(self.config.collection_name)
-            
+
             stats = {
                 "collection_name": self.config.collection_name,
                 "vectors_count": info.points_count,
@@ -265,23 +264,23 @@ class QdrantVectorStore(VectorStore):
                 "distance_metric": info.config.params.vectors.distance.value,
                 "status": info.status.value if info.status else "green"
             }
-            
+
             return stats
-            
+
         except Exception as e:
             self.logger.error(f"Error getting collection stats: {e}")
             return {"error": str(e)}
-    
+
     def test_connection(self) -> bool:
         """Test if Qdrant is accessible."""
         try:
             # Test connection by getting collections
             collections = self.client.get_collections()
-            
+
             connection_type = "Cloud" if self.config.url else "Local"
             self.logger.info(f"Qdrant {connection_type} connection successful")
             return True
-            
+
         except Exception as e:
             self.logger.error(f"Qdrant connection test failed: {e}")
             return False
@@ -289,36 +288,36 @@ class QdrantVectorStore(VectorStore):
 
 class FirestoreVectorStore(VectorStore):
     """Placeholder for future Firestore vector store implementation."""
-    
+
     def __init__(self, config: VectorDBConfig):
         self.config = config
         self.logger = logging.getLogger(__name__)
         raise NotImplementedError("Firestore vector store not yet implemented")
-    
+
     def create_collection(self, dimension: int) -> bool:
         raise NotImplementedError("Firestore vector store not yet implemented")
-    
+
     def collection_exists(self) -> bool:
         raise NotImplementedError("Firestore vector store not yet implemented")
-    
+
     def get_collection_info(self) -> Optional[Dict[str, Any]]:
         raise NotImplementedError("Firestore vector store not yet implemented")
-    
+
     def insert_documents(self, chunks: List[DocumentChunk], embeddings: List[List[float]]) -> bool:
         raise NotImplementedError("Firestore vector store not yet implemented")
-    
+
     def search(self, query_embedding: List[float], limit: int = 10) -> List[Dict[str, Any]]:
         raise NotImplementedError("Firestore vector store not yet implemented")
-    
+
     def delete_document(self, document_path: str) -> bool:
         raise NotImplementedError("Firestore vector store not yet implemented")
-    
+
     def clear_all(self) -> bool:
         raise NotImplementedError("Firestore vector store not yet implemented")
-    
+
     def get_stats(self) -> Dict[str, Any]:
         raise NotImplementedError("Firestore vector store not yet implemented")
-    
+
     def test_connection(self) -> bool:
         raise NotImplementedError("Firestore vector store not yet implemented")
 
