@@ -81,7 +81,66 @@ def test_load_config():
         Path(temp_path).unlink()
 
 
-def test_load_config_file_not_found():
-    """Test loading config when file doesn't exist."""
-    with pytest.raises(FileNotFoundError):
-        load_config('nonexistent.yaml')
+def test_load_config_file_not_found_fallback_to_env():
+    """Test loading config when file doesn't exist - should fallback to env defaults."""
+    import os
+    
+    # Save current env vars
+    saved_env = {}
+    env_vars_to_clear = [
+        'CONFIG_FROM_ENV', 'EMBEDDING_PROVIDER', 'VECTOR_DB_PROVIDER',
+        'DOCUMENTS_FOLDER', 'CHUNK_SIZE', 'CHUNK_OVERLAP'
+    ]
+    
+    for var in env_vars_to_clear:
+        if var in os.environ:
+            saved_env[var] = os.environ[var]
+            del os.environ[var]
+    
+    try:
+        # Should successfully load with defaults from environment
+        config = load_config('nonexistent.yaml')
+        # Verify defaults are loaded
+        assert config.documents.folder_path == './documents'
+        assert config.embedding.provider == 'ollama'
+        assert config.vector_db.provider == 'qdrant'
+        assert config.logging.level == 'INFO'
+    finally:
+        # Restore env vars
+        for var, value in saved_env.items():
+            os.environ[var] = value
+
+
+def test_load_config_from_env():
+    """Test loading config from environment variables."""
+    import os
+    
+    # Save current env vars
+    saved_env = {}
+    test_env_vars = {
+        'CONFIG_FROM_ENV': 'true',
+        'EMBEDDING_PROVIDER': 'ollama',
+        'EMBEDDING_MODEL': 'test-model',
+        'VECTOR_DB_PROVIDER': 'qdrant',
+        'COLLECTION_NAME': 'test-collection',
+        'DOCUMENTS_FOLDER': './test-docs'
+    }
+    
+    for var, value in test_env_vars.items():
+        if var in os.environ:
+            saved_env[var] = os.environ[var]
+        os.environ[var] = value
+    
+    try:
+        config = load_config('nonexistent.yaml')
+        assert config.embedding.provider == 'ollama'
+        assert config.embedding.model == 'test-model'
+        assert config.vector_db.collection_name == 'test-collection'
+        assert config.documents.folder_path == './test-docs'
+    finally:
+        # Restore env vars
+        for var in test_env_vars.keys():
+            if var in saved_env:
+                os.environ[var] = saved_env[var]
+            else:
+                del os.environ[var]

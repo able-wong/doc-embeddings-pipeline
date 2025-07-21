@@ -216,10 +216,59 @@ vector_db:
 
 ### Environment Variables
 
+The pipeline supports complete configuration via environment variables, perfect for serverless deployments and containerized environments.
+
+#### API Keys (Recommended)
 ```bash
-# API keys (recommended approach)
 export GEMINI_API_KEY="your-gemini-key"
 export QDRANT_API_KEY="your-qdrant-key"
+```
+
+#### Complete Environment Variable Configuration
+Set `CONFIG_FROM_ENV=true` to use environment variables instead of config files:
+
+```bash
+# Core configuration
+export CONFIG_FROM_ENV=true
+export EMBEDDING_PROVIDER="gemini"                    # or "ollama", "sentence_transformers"
+export EMBEDDING_MODEL="text-embedding-004"           # Provider-specific model
+export VECTOR_DB_PROVIDER="qdrant"
+export COLLECTION_NAME="documents"
+
+# Embedding provider settings
+export GEMINI_API_KEY="your-api-key"                  # For Gemini
+export GEMINI_MODEL="text-embedding-004"
+export OLLAMA_BASE_URL="http://localhost:11434"       # For Ollama
+export SENTENCE_TRANSFORMERS_MODEL="all-MiniLM-L6-v2" # For Sentence Transformers
+export SENTENCE_TRANSFORMERS_DEVICE="cpu"             # "cpu", "cuda", "mps"
+
+# Vector database settings
+export QDRANT_URL="https://your-cluster.qdrant.io:6333"  # For Qdrant Cloud
+export QDRANT_API_KEY="your-qdrant-key"                  # For Qdrant Cloud
+export QDRANT_HOST="localhost"                           # For local Qdrant
+export QDRANT_PORT="6333"                                # For local Qdrant
+
+# Document processing
+export DOCUMENTS_FOLDER="./documents"
+export CHUNK_SIZE="1000"
+export CHUNK_OVERLAP="200"
+
+# Logging
+export LOG_LEVEL="INFO"                               # DEBUG, INFO, WARNING, ERROR
+```
+
+#### Usage Examples
+```bash
+# Serverless deployment (no config file needed)
+CONFIG_FROM_ENV=true \
+EMBEDDING_PROVIDER=gemini \
+GEMINI_API_KEY=xxx \
+QDRANT_URL=https://xxx.qdrant.io:6333 \
+QDRANT_API_KEY=yyy \
+python3 ingest.py reindex-all
+
+# Traditional approach (unchanged)
+python3 ingest.py --config config.yaml reindex-all
 ```
 
 ## 🔌 Integration with RAG Applications
@@ -360,6 +409,74 @@ python3 ingest.py reindex-all  # Check logs for performance metrics
 - Embeddings: `google-generativeai`, `sentence-transformers`
 - Vector storage: `qdrant-client`
 - Testing: `pytest`, `pytest-mock`
+
+## 🚀 Deployment Options
+
+### Linux Server Deployment
+
+The pipeline works excellently on Linux servers with cron jobs for automated processing:
+
+```bash
+# Clone and setup
+git clone https://github.com/able-wong/doc-embeddings-pipeline.git
+cd doc-embeddings-pipeline
+./setup.sh
+
+# Create production config or use environment variables
+cp config.yaml.example /etc/doc-pipeline/production.yaml
+
+# Cron job for daily processing (using config file)
+0 2 * * * cd /opt/doc-pipeline && python3 ingest.py --config /etc/doc-pipeline/production.yaml reindex-all >> /var/log/doc-pipeline.log 2>&1
+
+# Cron job using environment variables (serverless-style)
+0 2 * * * cd /opt/doc-pipeline && CONFIG_FROM_ENV=true GEMINI_API_KEY=xxx QDRANT_URL=yyy python3 ingest.py reindex-all >> /var/log/doc-pipeline.log 2>&1
+```
+
+### Docker Deployment
+
+The pipeline can be containerized for consistent deployment across environments. Create your own Dockerfile based on the Python requirements, or use environment variables for configuration:
+
+```bash
+# Example Docker run with mounted documents
+docker run -v /host/documents:/app/documents \
+           -v /host/config.yaml:/app/config.yaml \
+           your-pipeline-image:latest reindex-all
+
+# Example with environment variables (no config file)
+docker run -e CONFIG_FROM_ENV=true \
+           -e GEMINI_API_KEY=xxx \
+           -e QDRANT_URL=yyy \
+           -v /host/documents:/app/documents \
+           your-pipeline-image:latest reindex-all
+```
+
+### Serverless Functions
+
+The environment variable support makes the pipeline suitable for serverless deployment:
+
+```bash
+# Firebase Functions, Cloudflare Workers, AWS Lambda, etc.
+CONFIG_FROM_ENV=true \
+EMBEDDING_PROVIDER=gemini \
+GEMINI_API_KEY=xxx \
+QDRANT_URL=https://your-cluster.qdrant.io:6333 \
+QDRANT_API_KEY=yyy \
+python3 ingest.py add-update single-document.pdf
+```
+
+**Note**: For true serverless utility, object store integration (S3, GCS) is recommended for document input. See Future Enhancements below.
+
+## 🚧 Future Enhancements
+
+The following features would expand deployment capabilities:
+
+- **Object Store Integration** - Direct S3/GCS/Azure Blob support for serverless functions
+- **HTTP API Endpoints** - REST API wrapper for webhook integration
+- **Kubernetes Manifests** - Production orchestration examples
+- **Pre-built Docker Images** - Ready-to-use containers on Docker Hub
+- **Batch Processing API** - Endpoint for processing multiple documents
+- **Webhook Triggers** - Automated processing from file upload events
+- **Monitoring Dashboard** - Web UI for pipeline status and metrics
 
 ## 🤝 Contributing
 
