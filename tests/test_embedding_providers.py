@@ -33,7 +33,7 @@ def test_create_embedding_provider_gemini():
     """Test creating a Gemini embedding provider."""
     gemini_config = GeminiConfig(api_key="test_key", model="text-embedding-004")
     config = EmbeddingConfig(provider="gemini", gemini=gemini_config)
-    
+
     with patch('google.generativeai.configure'):
         with patch('google.generativeai'):
             provider = create_embedding_provider(config)
@@ -43,7 +43,7 @@ def test_create_embedding_provider_gemini():
 def test_create_embedding_provider_unknown():
     """Test creating an unknown embedding provider."""
     config = EmbeddingConfig(provider="unknown")
-    
+
     with pytest.raises(ValueError, match="Unknown embedding provider"):
         create_embedding_provider(config)
 
@@ -56,13 +56,13 @@ def test_generate_embedding_success(mock_post, ollama_provider):
     mock_response.json.return_value = {"embedding": [0.1, 0.2, 0.3]}
     mock_response.raise_for_status.return_value = None
     mock_post.return_value = mock_response
-    
+
     text = "Test text"
     embedding = ollama_provider.generate_embedding(text)
-    
+
     assert embedding == [0.1, 0.2, 0.3]
     assert ollama_provider._embedding_dimension == 3
-    
+
     # Verify API call
     mock_post.assert_called_once_with(
         "http://localhost:11434/api/embeddings",
@@ -79,7 +79,7 @@ def test_generate_embedding_no_embedding_in_response(mock_post, ollama_provider)
     mock_response.json.return_value = {}
     mock_response.raise_for_status.return_value = None
     mock_post.return_value = mock_response
-    
+
     with pytest.raises(ValueError, match="No embedding returned"):
         ollama_provider.generate_embedding("test")
 
@@ -89,7 +89,7 @@ def test_generate_embedding_request_error(mock_post, ollama_provider):
     """Test embedding generation with request error."""
     # Mock request exception
     mock_post.side_effect = requests.RequestException("Connection error")
-    
+
     with pytest.raises(requests.RequestException):
         ollama_provider.generate_embedding("test")
 
@@ -103,12 +103,12 @@ def test_generate_embeddings_multiple(mock_post, ollama_provider):
         response.json.return_value = {"embedding": [0.1, 0.2, 0.3]}
         response.raise_for_status.return_value = None
         return response
-    
+
     mock_post.side_effect = mock_response_side_effect
-    
+
     texts = ["Text 1", "Text 2"]
     embeddings = ollama_provider.generate_embeddings(texts)
-    
+
     assert len(embeddings) == 2
     assert all(emb == [0.1, 0.2, 0.3] for emb in embeddings)
     assert mock_post.call_count == 2
@@ -119,9 +119,9 @@ def test_get_embedding_dimension_cached(mock_post, ollama_provider):
     """Test getting embedding dimension when already cached."""
     # Set cached dimension
     ollama_provider._embedding_dimension = 384
-    
+
     dimension = ollama_provider.get_embedding_dimension()
-    
+
     assert dimension == 384
     # Should not make API call
     mock_post.assert_not_called()
@@ -135,9 +135,9 @@ def test_get_embedding_dimension_not_cached(mock_post, ollama_provider):
     mock_response.json.return_value = {"embedding": [0.1, 0.2, 0.3, 0.4]}
     mock_response.raise_for_status.return_value = None
     mock_post.return_value = mock_response
-    
+
     dimension = ollama_provider.get_embedding_dimension()
-    
+
     assert dimension == 4
     assert ollama_provider._embedding_dimension == 4
 
@@ -153,15 +153,15 @@ def test_test_connection_success(mock_post, mock_get, ollama_provider):
     }
     mock_get_response.raise_for_status.return_value = None
     mock_get.return_value = mock_get_response
-    
+
     # Mock embedding generation response
     mock_post_response = Mock()
     mock_post_response.json.return_value = {"embedding": [0.1, 0.2, 0.3]}
     mock_post_response.raise_for_status.return_value = None
     mock_post.return_value = mock_post_response
-    
+
     result = ollama_provider.test_connection()
-    
+
     assert result is True
     mock_get.assert_called_once_with("http://localhost:11434/api/tags", timeout=10)
     mock_post.assert_called_once()
@@ -177,9 +177,9 @@ def test_test_connection_model_not_found(mock_get, ollama_provider):
     }
     mock_response.raise_for_status.return_value = None
     mock_get.return_value = mock_response
-    
+
     result = ollama_provider.test_connection()
-    
+
     assert result is False
 
 
@@ -188,9 +188,9 @@ def test_test_connection_api_error(mock_get, ollama_provider):
     """Test connection test with API error."""
     # Mock API error
     mock_get.side_effect = requests.RequestException("API error")
-    
+
     result = ollama_provider.test_connection()
-    
+
     assert result is False
 
 
@@ -208,7 +208,7 @@ def gemini_config():
 def test_gemini_provider_missing_config():
     """Test Gemini provider with missing configuration."""
     config = EmbeddingConfig(provider="gemini")  # No gemini config
-    
+
     with pytest.raises(ValueError, match="Gemini configuration is required"):
         GeminiEmbeddingProvider(config)
 
@@ -221,7 +221,7 @@ def test_gemini_provider_missing_api_key(mock_genai):
         provider="gemini",
         gemini=GeminiConfig(api_key="", model="text-embedding-004")
     )
-    
+
     with pytest.raises(ValueError, match="Gemini API key is required"):
         GeminiEmbeddingProvider(config)
 
@@ -234,7 +234,7 @@ def test_gemini_provider_env_api_key(mock_genai):
         provider="gemini",
         gemini=GeminiConfig(api_key="", model="text-embedding-004")  # Empty key, should use env
     )
-    
+
     provider = GeminiEmbeddingProvider(config)
     mock_genai.configure.assert_called_once_with(api_key="env_key")
 
@@ -244,13 +244,13 @@ def test_gemini_generate_embedding_success(mock_genai, gemini_config):
     """Test successful Gemini embedding generation."""
     # Mock successful response
     mock_genai.embed_content.return_value = {"embedding": [0.1, 0.2, 0.3]}
-    
+
     provider = GeminiEmbeddingProvider(gemini_config)
     embedding = provider.generate_embedding("test text")
-    
+
     assert embedding == [0.1, 0.2, 0.3]
     assert provider._embedding_dimension == 3
-    
+
     mock_genai.embed_content.assert_called_once_with(
         model="models/text-embedding-004",
         content="test text",
@@ -262,10 +262,10 @@ def test_gemini_generate_embedding_success(mock_genai, gemini_config):
 def test_gemini_test_connection_success(mock_genai, gemini_config):
     """Test successful Gemini connection test."""
     mock_genai.embed_content.return_value = {"embedding": [0.1, 0.2, 0.3]}
-    
+
     provider = GeminiEmbeddingProvider(gemini_config)
     result = provider.test_connection()
-    
+
     assert result is True
     mock_genai.embed_content.assert_called_once()
 
@@ -274,10 +274,10 @@ def test_gemini_test_connection_success(mock_genai, gemini_config):
 def test_gemini_test_connection_failure(mock_genai, gemini_config):
     """Test Gemini connection test failure."""
     mock_genai.embed_content.side_effect = Exception("API error")
-    
+
     provider = GeminiEmbeddingProvider(gemini_config)
     result = provider.test_connection()
-    
+
     assert result is False
 
 
@@ -305,7 +305,7 @@ def test_create_embedding_provider_sentence_transformers(sentence_transformers_c
 def test_sentence_transformers_provider_missing_config():
     """Test Sentence Transformers provider with missing configuration."""
     config = EmbeddingConfig(provider="sentence_transformers")  # No sentence_transformers config
-    
+
     with pytest.raises(ValueError, match="Sentence Transformers config is required"):
         SentenceTransformersEmbeddingProvider(config)
 
@@ -318,10 +318,10 @@ def test_sentence_transformers_generate_embedding_success(mock_st_class, sentenc
     mock_model.encode.return_value = Mock()
     mock_model.encode.return_value.tolist.return_value = [0.1, 0.2, 0.3]
     mock_st_class.return_value = mock_model
-    
+
     provider = SentenceTransformersEmbeddingProvider(sentence_transformers_config)
     embedding = provider.generate_embedding("test text")
-    
+
     assert embedding == [0.1, 0.2, 0.3]
     mock_model.encode.assert_called_once_with("test text", convert_to_tensor=False, normalize_embeddings=True)
 
@@ -334,14 +334,14 @@ def test_sentence_transformers_generate_embeddings_batch(mock_st_class, sentence
     mock_model.encode.return_value = Mock()
     mock_model.encode.return_value.tolist.return_value = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
     mock_st_class.return_value = mock_model
-    
+
     provider = SentenceTransformersEmbeddingProvider(sentence_transformers_config)
     embeddings = provider.generate_embeddings(["text1", "text2"])
-    
+
     assert embeddings == [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]
     mock_model.encode.assert_called_once_with(
-        ["text1", "text2"], 
-        convert_to_tensor=False, 
+        ["text1", "text2"],
+        convert_to_tensor=False,
         normalize_embeddings=True,
         batch_size=32
     )
@@ -354,10 +354,10 @@ def test_sentence_transformers_get_embedding_dimension(mock_st_class, sentence_t
     mock_model = Mock()
     mock_model.get_sentence_embedding_dimension.return_value = 384
     mock_st_class.return_value = mock_model
-    
+
     provider = SentenceTransformersEmbeddingProvider(sentence_transformers_config)
     dimension = provider.get_embedding_dimension()
-    
+
     assert dimension == 384
     mock_model.get_sentence_embedding_dimension.assert_called_once()
 
@@ -371,10 +371,10 @@ def test_sentence_transformers_test_connection_success(mock_st_class, sentence_t
     mock_model.encode.return_value.tolist.return_value = [0.1, 0.2, 0.3]
     mock_model.get_sentence_embedding_dimension.return_value = 384
     mock_st_class.return_value = mock_model
-    
+
     provider = SentenceTransformersEmbeddingProvider(sentence_transformers_config)
     result = provider.test_connection()
-    
+
     assert result is True
     mock_model.encode.assert_called_once()
 
@@ -383,8 +383,8 @@ def test_sentence_transformers_test_connection_success(mock_st_class, sentence_t
 def test_sentence_transformers_test_connection_failure(mock_st_class, sentence_transformers_config):
     """Test Sentence Transformers connection test failure."""
     mock_st_class.side_effect = Exception("Model loading error")
-    
+
     provider = SentenceTransformersEmbeddingProvider(sentence_transformers_config)
     result = provider.test_connection()
-    
+
     assert result is False

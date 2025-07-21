@@ -32,7 +32,7 @@ def test_config_model():
             'level': 'INFO'
         }
     }
-    
+
     config = Config(**config_data)
     assert config.documents.folder_path == './documents'
     assert config.embedding.provider == 'ollama'
@@ -66,11 +66,11 @@ def test_load_config():
             'level': 'DEBUG'
         }
     }
-    
+
     with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
         yaml.dump(config_data, f)
         temp_path = f.name
-    
+
     try:
         config = load_config(temp_path)
         assert config.documents.chunk_size == 500

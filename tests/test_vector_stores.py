@@ -41,7 +41,7 @@ def sample_chunk():
         last_modified=datetime.now(),
         content_hash="abcd1234"
     )
-    
+
     return DocumentChunk(
         chunk_text="This is a test chunk.",
         original_text="This is the original document text.",
@@ -61,7 +61,7 @@ def test_create_vector_store_qdrant(vector_db_config):
 def test_create_vector_store_unknown():
     """Test creating an unknown vector store."""
     config = VectorDBConfig(provider="unknown")
-    
+
     with pytest.raises(ValueError, match="Unknown vector store provider"):
         create_vector_store(config)
 
@@ -72,11 +72,11 @@ def test_create_collection_success(qdrant_store):
     mock_collections = MagicMock()
     mock_collections.collections = []
     qdrant_store.mock_client.get_collections.return_value = mock_collections
-    
+
     result = qdrant_store.create_collection(384)
-    
+
     assert result is True
-    
+
     # Verify client calls
     qdrant_store.mock_client.get_collections.assert_called_once()
     qdrant_store.mock_client.create_collection.assert_called_once()
@@ -90,11 +90,11 @@ def test_create_collection_already_exists(qdrant_store):
     mock_collections = MagicMock()
     mock_collections.collections = [mock_collection]
     qdrant_store.mock_client.get_collections.return_value = mock_collections
-    
+
     result = qdrant_store.create_collection(384)
-    
+
     assert result is True
-    
+
     # Verify get_collections was called but create_collection was not
     qdrant_store.mock_client.get_collections.assert_called_once()
     qdrant_store.mock_client.create_collection.assert_not_called()
@@ -104,9 +104,9 @@ def test_create_collection_error(qdrant_store):
     """Test collection creation with error."""
     # Mock error during get_collections
     qdrant_store.mock_client.get_collections.side_effect = Exception("Connection error")
-    
+
     result = qdrant_store.create_collection(384)
-    
+
     assert result is False
 
 
@@ -118,9 +118,9 @@ def test_collection_exists_true(qdrant_store):
     mock_collections = MagicMock()
     mock_collections.collections = [mock_collection]
     qdrant_store.mock_client.get_collections.return_value = mock_collections
-    
+
     result = qdrant_store.collection_exists()
-    
+
     assert result is True
 
 
@@ -130,9 +130,9 @@ def test_collection_exists_false(qdrant_store):
     mock_collections = MagicMock()
     mock_collections.collections = []
     qdrant_store.mock_client.get_collections.return_value = mock_collections
-    
+
     result = qdrant_store.collection_exists()
-    
+
     assert result is False
 
 
@@ -145,9 +145,9 @@ def test_get_collection_info_success(qdrant_store):
     mock_info.config.params.vectors.size = 384
     mock_info.config.params.vectors.distance.value = "cosine"
     qdrant_store.mock_client.get_collection.return_value = mock_info
-    
+
     result = qdrant_store.get_collection_info()
-    
+
     expected_info = {
         "result": {
             "status": "green",
@@ -162,7 +162,7 @@ def test_get_collection_info_success(qdrant_store):
             }
         }
     }
-    
+
     assert result == expected_info
 
 
@@ -170,9 +170,9 @@ def test_get_collection_info_not_found(qdrant_store):
     """Test getting collection info when collection doesn't exist."""
     # Mock exception
     qdrant_store.mock_client.get_collection.side_effect = Exception("Collection not found")
-    
+
     result = qdrant_store.get_collection_info()
-    
+
     assert result is None
 
 
@@ -180,11 +180,11 @@ def test_insert_documents_success(qdrant_store, sample_chunk):
     """Test successful document insertion."""
     chunks = [sample_chunk]
     embeddings = [[0.1, 0.2, 0.3]]
-    
+
     result = qdrant_store.insert_documents(chunks, embeddings)
-    
+
     assert result is True
-    
+
     # Verify upsert was called
     qdrant_store.mock_client.upsert.assert_called_once()
     call_args = qdrant_store.mock_client.upsert.call_args
@@ -196,7 +196,7 @@ def test_insert_documents_mismatch_length(qdrant_store, sample_chunk):
     """Test document insertion with mismatched chunk and embedding counts."""
     chunks = [sample_chunk]
     embeddings = [[0.1, 0.2, 0.3], [0.4, 0.5, 0.6]]  # Different length
-    
+
     with pytest.raises(ValueError, match="Number of chunks must match"):
         qdrant_store.insert_documents(chunks, embeddings)
 
@@ -209,10 +209,10 @@ def test_search_success(qdrant_store):
     mock_hit.score = 0.95
     mock_hit.payload = {"chunk_text": "Test result"}
     qdrant_store.mock_client.search.return_value = [mock_hit]
-    
+
     query_embedding = [0.1, 0.2, 0.3]
     results = qdrant_store.search(query_embedding, limit=5)
-    
+
     expected_results = [
         {
             "id": "test_id",
@@ -220,9 +220,9 @@ def test_search_success(qdrant_store):
             "payload": {"chunk_text": "Test result"}
         }
     ]
-    
+
     assert results == expected_results
-    
+
     # Verify search call
     qdrant_store.mock_client.search.assert_called_once_with(
         collection_name="test_collection",
@@ -235,9 +235,9 @@ def test_search_success(qdrant_store):
 def test_delete_document_success(qdrant_store):
     """Test successful document deletion."""
     result = qdrant_store.delete_document("test.txt")
-    
+
     assert result is True
-    
+
     # Verify delete was called
     qdrant_store.mock_client.delete.assert_called_once()
     call_args = qdrant_store.mock_client.delete.call_args
@@ -247,9 +247,9 @@ def test_delete_document_success(qdrant_store):
 def test_clear_all_success(qdrant_store):
     """Test successful collection clearing."""
     result = qdrant_store.clear_all()
-    
+
     assert result is True
-    
+
     # Verify delete_collection was called
     qdrant_store.mock_client.delete_collection.assert_called_once_with("test_collection")
 
@@ -258,9 +258,9 @@ def test_clear_all_collection_not_found(qdrant_store):
     """Test clearing when collection doesn't exist."""
     # Mock exception during delete_collection
     qdrant_store.mock_client.delete_collection.side_effect = Exception("Collection not found")
-    
+
     result = qdrant_store.clear_all()
-    
+
     assert result is True  # Should still return True as it handles exceptions
 
 
@@ -273,9 +273,9 @@ def test_get_stats_success(qdrant_store):
     mock_info.config.params.vectors.distance.value = "cosine"
     mock_info.status = None
     qdrant_store.mock_client.get_collection.return_value = mock_info
-    
+
     stats = qdrant_store.get_stats()
-    
+
     expected_stats = {
         "collection_name": "test_collection",
         "vectors_count": 150,
@@ -283,7 +283,7 @@ def test_get_stats_success(qdrant_store):
         "distance_metric": "cosine",
         "status": "green"
     }
-    
+
     assert stats == expected_stats
 
 
@@ -292,9 +292,9 @@ def test_test_connection_success(qdrant_store):
     # Mock successful get_collections call
     mock_collections = MagicMock()
     qdrant_store.mock_client.get_collections.return_value = mock_collections
-    
+
     result = qdrant_store.test_connection()
-    
+
     assert result is True
     qdrant_store.mock_client.get_collections.assert_called_once()
 
@@ -303,7 +303,7 @@ def test_test_connection_failure(qdrant_store):
     """Test connection test failure."""
     # Mock connection error
     qdrant_store.mock_client.get_collections.side_effect = Exception("Connection failed")
-    
+
     result = qdrant_store.test_connection()
-    
+
     assert result is False
