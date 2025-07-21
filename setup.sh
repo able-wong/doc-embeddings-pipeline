@@ -10,8 +10,8 @@ echo "====================================="
 
 # Check Python version
 echo "📋 Checking Python version..."
-if ! python3 --version | grep -E "3\.(8|9|10|11|12|13)" > /dev/null; then
-    echo "❌ Error: Python 3.8+ is required"
+if ! python3 --version | grep -E "3\.(10|11|12|13)" > /dev/null; then
+    echo "❌ Error: Python 3.10+ is required"
     echo "   Current version: $(python3 --version)"
     exit 1
 fi

@@ -2,7 +2,7 @@
 
 A production-ready, modular Python pipeline for building RAG (Retrieval-Augmented Generation) applications. Process documents, generate embeddings, and store them in vector databases with support for multiple embedding providers and deployment scenarios.
 
-![Pipeline Architecture](https://img.shields.io/badge/Architecture-Modular-blue) ![Python](https://img.shields.io/badge/Python-3.8+-green) ![RAG](https://img.shields.io/badge/Use_Case-RAG_Pipeline-orange) ![License](https://img.shields.io/badge/License-MIT-lightgrey)
+![Pipeline Architecture](https://img.shields.io/badge/Architecture-Modular-blue) ![Python](https://img.shields.io/badge/Python-3.10+-green) ![RAG](https://img.shields.io/badge/Use_Case-RAG_Pipeline-orange) ![License](https://img.shields.io/badge/License-MIT-lightgrey)
 
 ## 🎯 Perfect for RAG Applications
 
@@ -82,9 +82,21 @@ graph TB
 
 ## 🚀 Quick Start
 
+## 🐛 Troubleshooting
+
+### Common Issues
+
+**Dimension Mismatch:**
+
+```bash
+# Clear collection when switching providers
+python3 ingest.py clear-all
+python3 ingest.py reindex-all
+```
+
 ### Prerequisites
 
-- **Python 3.8+**
+- **Python 3.10+**
 - **Docker** (for local Qdrant) - [Install Docker Desktop](https://www.docker.com/products/docker-desktop/)
 - **Choose your embedding provider:**
   - Ollama (local) - Install with `brew install ollama`
@@ -336,7 +348,7 @@ python3 ingest.py reindex-all  # Check logs for performance metrics
 
 **System Requirements:**
 
-- Python 3.8+
+- Python 3.10+
 - Docker Desktop (for local Qdrant)
 - 4GB+ RAM recommended
 - 1GB+ disk space for models
