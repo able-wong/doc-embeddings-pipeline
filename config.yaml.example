@@ -1,0 +1,148 @@
+# Document Ingestion Pipeline Configuration Template
+# 
+# Copy this file to config.yaml and configure for your setup:
+# cp config.yaml.example config.yaml
+#
+# This file contains examples for all supported providers and configurations.
+# Uncomment and configure the sections you need.
+
+# ============================================================================
+# DOCUMENT PROCESSING SETTINGS
+# ============================================================================
+documents:
+  folder_path: "./documents"  # Path to folder containing documents to process
+  supported_extensions: [".txt", ".docx", ".pdf", ".md", ".html"]  # File types to process
+  chunk_size: 1000      # Maximum characters per text chunk
+  chunk_overlap: 200    # Characters to overlap between chunks (for context continuity)
+
+# ============================================================================
+# EMBEDDING CONFIGURATION
+# ============================================================================
+embedding:
+  # PROVIDER SELECTION: Choose "ollama", "gemini", or "sentence_transformers"
+  provider: "ollama"  # Options: "ollama", "gemini", "sentence_transformers"
+  
+  # OLLAMA SETTINGS (Local embedding server)
+  # Use these settings when provider = "ollama"
+  model: "nomic-embed-text"           # Recommended: 768 dimensions, 274MB
+  # model: "mxbai-embed-large"        # Alternative: 1024 dimensions, 669MB (higher quality)
+  base_url: "http://localhost:11434" # Change if Ollama runs on different host
+  timeout: 60                         # Request timeout in seconds
+  
+  # GEMINI SETTINGS (Google Cloud API)
+  # Use these settings when provider = "gemini"
+  # Uncomment and configure when switching to Gemini:
+  gemini:
+    api_key: ""                       # REQUIRED: Your Gemini API key (or use GEMINI_API_KEY env var)
+    model: "text-embedding-004"       # Google's latest embedding model (768 dimensions)
+  
+  # SENTENCE TRANSFORMERS SETTINGS (Local Python library)
+  # Use these settings when provider = "sentence_transformers"
+  # Uncomment and configure when switching to Sentence Transformers:
+  sentence_transformers:
+    model: "all-MiniLM-L6-v2"         # Lightweight model: 384 dimensions, ~90MB
+    # model: "all-mpnet-base-v2"      # Alternative: Higher quality, 768 dimensions, ~420MB
+    device: "cpu"                     # Options: "cpu", "cuda" (GPU), "mps" (Apple Silicon)
+
+# ============================================================================
+# EMBEDDING PROVIDER SETUP EXAMPLES
+# ============================================================================
+# 
+# SETUP FOR OLLAMA (LOCAL):
+# 1. Install: brew install ollama
+# 2. Start service: ollama serve
+# 3. Download model: ollama pull nomic-embed-text
+# 4. Set provider: "ollama" (already set above)
+# 5. Update base_url if Ollama runs on different host/port
+#
+# SETUP FOR GEMINI (CLOUD API):
+# 1. Get API key from: https://ai.google.dev/
+# 2. Set provider: "gemini" 
+# 3. Set API key either:
+#    a) In gemini.api_key above, OR
+#    b) Environment variable: export GEMINI_API_KEY="your-key"
+# 4. Update collection_name to avoid mixing embeddings from different providers
+#
+# SETUP FOR SENTENCE TRANSFORMERS (LOCAL PYTHON):
+# 1. Install: pip install sentence-transformers
+# 2. Set provider: "sentence_transformers"
+# 3. Choose model: "all-MiniLM-L6-v2" (fast, 384D) or "all-mpnet-base-v2" (better, 768D)
+# 4. Set device: "cpu" (default), "cuda" (NVIDIA GPU), or "mps" (Apple Silicon)
+# 5. Update collection_name to avoid mixing embeddings from different providers
+#
+# IMPORTANT: Different providers produce different embedding dimensions!
+# Clear your vector database when switching providers: python3 ingest.py clear-all
+
+# ============================================================================
+# VECTOR DATABASE CONFIGURATION
+# ============================================================================
+vector_db:
+  provider: "qdrant"              # Vector database type (currently only qdrant supported)
+  
+  # LOCAL QDRANT SETTINGS (Default - for self-hosted instance)
+  host: "localhost"               # Qdrant server host
+  port: 6333                      # Qdrant server port
+  
+  # QDRANT CLOUD SETTINGS (Takes precedence if url is provided)
+  # Uncomment and configure for Qdrant Cloud:
+  url: "https://your-cluster-url.gcp.cloud.qdrant.io:6333"  # Your Qdrant Cloud URL
+  api_key: ""                   # Your Qdrant Cloud API key (or use QDRANT_API_KEY env var)
+  
+  # COLLECTION SETTINGS
+  collection_name: "documents"    # Collection name for storing embeddings
+  # collection_name: "documents_gemini"  # Use different collection for different providers
+  distance_metric: "cosine"       # Similarity metric: "cosine", "euclidean", or "dot"
+
+# ============================================================================
+# VECTOR DATABASE SETUP EXAMPLES
+# ============================================================================
+#
+# SETUP FOR LOCAL QDRANT:
+# 1. Install: brew install qdrant/tap/qdrant
+# 2. Start service: qdrant
+# 3. Use host/port settings above (localhost:6333)
+#
+# SETUP FOR QDRANT CLOUD:
+# 1. Sign up at: https://cloud.qdrant.io/
+# 2. Create a cluster and get URL + API key
+# 3. Uncomment url and api_key above
+# 4. Set API key either:
+#    a) In api_key above, OR
+#    b) Environment variable: export QDRANT_API_KEY="your-key"
+
+# ============================================================================
+# LOGGING CONFIGURATION
+# ============================================================================
+logging:
+  level: "INFO"  # Log level: DEBUG (verbose), INFO (normal), WARNING, ERROR (minimal)
+
+# ============================================================================
+# COMMON CONFIGURATION COMBINATIONS
+# ============================================================================
+#
+# 1. LOCAL DEVELOPMENT (Default above):
+#    - Ollama + Local Qdrant
+#    - provider: "ollama", host: "localhost"
+#
+# 2. PYTHON LOCAL + LOCAL VECTOR DB:
+#    - provider: "sentence_transformers"
+#    - No external dependencies, all runs locally
+#    - Use host: "localhost" for Qdrant
+#
+# 3. CLOUD EMBEDDINGS + LOCAL VECTOR DB:
+#    - provider: "gemini"
+#    - Set GEMINI_API_KEY environment variable
+#    - Use host: "localhost" for Qdrant
+#
+# 4. LOCAL EMBEDDINGS + CLOUD VECTOR DB:
+#    - provider: "ollama" or "sentence_transformers"
+#    - Uncomment url and api_key for Qdrant Cloud
+#    - Set QDRANT_API_KEY environment variable
+#
+# 5. FULL CLOUD SETUP:
+#    - provider: "gemini"
+#    - Uncomment url and api_key for Qdrant Cloud
+#    - Set both GEMINI_API_KEY and QDRANT_API_KEY environment variables
+#
+# Remember to use different collection_name when switching embedding providers!
+# Dimensions: Ollama/Gemini=768, Sentence Transformers all-MiniLM-L6-v2=384
