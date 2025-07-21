@@ -97,9 +97,9 @@ vector_db:
 # VECTOR DATABASE SETUP EXAMPLES
 # ============================================================================
 #
-# SETUP FOR LOCAL QDRANT:
-# 1. Install: brew install qdrant/tap/qdrant
-# 2. Start service: qdrant
+# SETUP FOR LOCAL QDRANT (Docker):
+# 1. Install Docker if not already installed
+# 2. Run: docker run -d --name qdrant -p 6333:6333 -p 6334:6334 -v $(pwd)/qdrant_storage:/qdrant/storage:z qdrant/qdrant
 # 3. Use host/port settings above (localhost:6333)
 #
 # SETUP FOR QDRANT CLOUD:
