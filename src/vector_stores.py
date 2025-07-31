@@ -35,7 +35,7 @@ class VectorStore(ABC):
         pass
 
     @abstractmethod
-    def delete_document(self, document_path: str) -> bool:
+    def delete_document(self, document_url: str) -> bool:
         """Delete all chunks for a specific document."""
         pass
 
@@ -161,13 +161,17 @@ class QdrantVectorStore(VectorStore):
                 payload = {
                     "chunk_text": chunk.chunk_text,
                     "original_text": chunk.original_text,
-                    "file_path": chunk.metadata.file_path,
-                    "filename": chunk.metadata.filename,
+                    "source_url": chunk.metadata.source_url,  # Renamed from file_url, filename removed
                     "file_extension": chunk.metadata.file_extension,
                     "file_size": chunk.metadata.file_size,
                     "last_modified": chunk.metadata.last_modified.isoformat(),
                     "content_hash": chunk.metadata.content_hash,
-                    "chunk_index": chunk.chunk_index
+                    "chunk_index": chunk.chunk_index,
+                    # New LLM-extracted metadata fields
+                    "author": chunk.metadata.author,
+                    "title": chunk.metadata.title,
+                    "publication_date": chunk.metadata.publication_date.isoformat() if chunk.metadata.publication_date else None,
+                    "tags": chunk.metadata.tags
                 }
 
                 point = PointStruct(
@@ -214,25 +218,25 @@ class QdrantVectorStore(VectorStore):
             self.logger.error(f"Error searching documents: {e}")
             return []
 
-    def delete_document(self, document_path: str) -> bool:
+    def delete_document(self, document_url: str) -> bool:
         """Delete all chunks for a specific document from Qdrant."""
         try:
             from qdrant_client.models import Filter, FieldCondition, MatchValue
 
-            # Delete points with matching file_path
+            # Delete points with matching source_url
             self.client.delete(
                 collection_name=self.config.collection_name,
                 points_selector=Filter(
                     must=[
                         FieldCondition(
-                            key="file_path",
-                            match=MatchValue(value=document_path)
+                            key="source_url",
+                            match=MatchValue(value=document_url)
                         )
                     ]
                 )
             )
 
-            self.logger.info(f"Deleted chunks for document: {document_path}")
+            self.logger.info(f"Deleted chunks for document: {document_url}")
             return True
 
         except Exception as e:
@@ -309,7 +313,7 @@ class FirestoreVectorStore(VectorStore):
     def search(self, query_embedding: List[float], limit: int = 10) -> List[Dict[str, Any]]:
         raise NotImplementedError("Firestore vector store not yet implemented")
 
-    def delete_document(self, document_path: str) -> bool:
+    def delete_document(self, document_url: str) -> bool:
         raise NotImplementedError("Firestore vector store not yet implemented")
 
     def clear_all(self) -> bool:

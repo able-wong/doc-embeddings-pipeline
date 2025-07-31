@@ -5,6 +5,7 @@ from .config import Config
 from .document_processor import DocumentProcessor
 from .embedding_providers import create_embedding_provider
 from .vector_stores import create_vector_store
+from .llm_providers import create_llm_provider
 
 
 class IngestionPipeline:
@@ -17,6 +18,7 @@ class IngestionPipeline:
         # Initialize components
         self.document_processor = DocumentProcessor(config.documents)
         self.embedding_provider = create_embedding_provider(config.embedding)
+        self.llm_provider = create_llm_provider(config.llm)
         self.vector_store = create_vector_store(config.vector_db)
 
         # Setup logging
@@ -50,6 +52,13 @@ class IngestionPipeline:
         except Exception as e:
             self.logger.error(f"Vector store test failed: {e}")
             results['vector_store'] = False
+
+        # Test LLM provider
+        try:
+            results['llm_provider'] = self.llm_provider.test_connection()
+        except Exception as e:
+            self.logger.error(f"LLM provider test failed: {e}")
+            results['llm_provider'] = False
 
         return results
 
@@ -123,10 +132,11 @@ class IngestionPipeline:
 
             # Delete existing chunks for this document
             relative_path = str(target_file.relative_to(self.config.documents.folder_path))
-            self.vector_store.delete_document(relative_path)
+            source_url = f"file:{relative_path}"
+            self.vector_store.delete_document(source_url)
 
-            # Process document
-            chunks = self.document_processor.process_document(target_file)
+            # Process document with LLM metadata extraction
+            chunks = self.document_processor.process_document(target_file, self.llm_provider)
 
             if not chunks:
                 self.logger.warning(f"No chunks generated for {filename}")
@@ -179,8 +189,8 @@ class IngestionPipeline:
                 try:
                     self.logger.info(f"Processing {file_path.name}...")
 
-                    # Process document
-                    chunks = self.document_processor.process_document(file_path)
+                    # Process document with LLM metadata extraction
+                    chunks = self.document_processor.process_document(file_path, self.llm_provider)
 
                     if not chunks:
                         self.logger.warning(f"No chunks generated for {file_path.name}")
@@ -228,10 +238,14 @@ class IngestionPipeline:
 
                 formatted_result = {
                     'score': score,
-                    'file_path': result.get('payload', {}).get('file_path', ''),
-                    'filename': result.get('payload', {}).get('filename', ''),
+                    'source_url': result.get('payload', {}).get('source_url', ''),
                     'chunk_text': result.get('payload', {}).get('chunk_text', ''),
-                    'chunk_index': result.get('payload', {}).get('chunk_index', 0)
+                    'chunk_index': result.get('payload', {}).get('chunk_index', 0),
+                    # Include new metadata fields
+                    'author': result.get('payload', {}).get('author'),
+                    'title': result.get('payload', {}).get('title'),
+                    'publication_date': result.get('payload', {}).get('publication_date'),
+                    'tags': result.get('payload', {}).get('tags', [])
                 }
                 formatted_results.append(formatted_result)
 
@@ -263,8 +277,7 @@ class IngestionPipeline:
                 context_parts.append(f"[{i+1}] {result['chunk_text']}")
                 sources.append({
                     'index': i + 1,
-                    'file_path': result['file_path'],
-                    'filename': result['filename'],
+                    'source_url': result['source_url'],
                     'score': result['score']
                 })
 
@@ -294,8 +307,7 @@ class IngestionPipeline:
             for file_path in files:
                 stat = file_path.stat()
                 documents.append({
-                    'filename': file_path.name,
-                    'path': str(file_path.relative_to(self.config.documents.folder_path)),
+                    'source_url': f"file:{file_path.relative_to(self.config.documents.folder_path)}",
                     'extension': file_path.suffix,
                     'size': stat.st_size,
                     'last_modified': stat.st_mtime

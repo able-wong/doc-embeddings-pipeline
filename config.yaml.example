@@ -74,6 +74,92 @@ embedding:
 # Clear your vector database when switching providers: python3 ingest.py clear-all
 
 # ============================================================================
+# LLM CONFIGURATION (for metadata extraction)
+# ============================================================================
+llm:
+  # PROVIDER SELECTION: Choose "ollama" or "gemini"
+  provider: "ollama"  # Options: "ollama", "gemini"
+  
+  # OLLAMA SETTINGS (Local LLM server)
+  # Use these settings when provider = "ollama"
+  model: "llama3.2"                   # Recommended: Fast and capable for metadata extraction
+  # model: "llama3.2:3b"              # Alternative: Smaller, faster model
+  # model: "qwen2.5:7b"               # Alternative: Good for structured data extraction
+  base_url: "http://localhost:11434" # Change if Ollama runs on different host
+  timeout: 120                        # Request timeout in seconds (LLM calls take longer)
+  
+  # GEMINI SETTINGS (Google Cloud API)
+  # Use these settings when provider = "gemini"
+  # Uncomment and configure when switching to Gemini:
+  gemini:
+    api_key: ""                       # REQUIRED: Your Gemini API key (or use GEMINI_API_KEY env var)
+    model: "gemini-1.5-flash"         # Google's fast model for text processing
+  
+  # CONTENT PROCESSING SETTINGS
+  content_max_chars: 8000             # Maximum characters to send to LLM (default fallback)
+  auto_detect_context_limit: true     # Automatically adjust based on model capabilities
+  
+  # METADATA EXTRACTION SETTINGS
+  max_retries: 3                      # Number of retries if LLM extraction fails
+  metadata_extraction_prompt: |       # Customizable prompt for metadata extraction
+    Extract metadata from this document:
+
+    SOURCE URL: {source_url}
+    FILENAME: {filename}
+    CONTENT: {content}
+
+    Please analyze the content, filename, and source URL to extract the following metadata. Return a valid JSON object with these exact fields:
+
+    {{
+      "author": "string or null (extract from content first, then try source URL path if it looks like an author folder)",
+      "title": "string (prefer from content, fallback to cleaned filename)",
+      "publication_date": "YYYY-MM-DD or null (extract from content or filename pattern like 2025-03-04)",
+      "tags": ["array", "of", "relevant", "keywords", "from", "content"]
+    }}
+
+    Guidelines:
+    - For author: 
+      1. First look in content for explicit mentions (e.g., "By John Doe", "Author: Jane Smith")
+      2. If not found, check if source URL has author-like folder structure (e.g., "articles/John Wong/file.html" → "John Wong")
+      3. Only extract if it clearly looks like a person's name, leave null if uncertain
+    - For title: Prefer content title, but clean filename if needed (remove dates, convert dashes/underscores to spaces)
+    - For publication_date: Look for dates in content first, then try filename patterns
+    - For tags: Include 3-7 relevant keywords/topics from the content
+    - Return valid JSON only, no other text
+
+# ============================================================================
+# LLM PROVIDER SETUP EXAMPLES
+# ============================================================================
+# 
+# SETUP FOR OLLAMA (LOCAL):
+# 1. Install: brew install ollama
+# 2. Start service: ollama serve
+# 3. Download model: ollama pull llama3.2
+# 4. Set provider: "ollama" (already set above)
+# 5. Update base_url if Ollama runs on different host/port
+#
+# SETUP FOR GEMINI (CLOUD API):
+# 1. Get API key from: https://ai.google.dev/
+# 2. Set provider: "gemini" 
+# 3. Set API key either:
+#    a) In gemini.api_key above, OR
+#    b) Environment variable: export GEMINI_API_KEY="your-key"
+#
+# CUSTOMIZING METADATA EXTRACTION:
+# - Modify metadata_extraction_prompt to change extraction behavior
+# - Adjust max_retries for reliability vs speed tradeoff
+# - The prompt supports {filename} and {content} placeholders
+# - Note: filename is derived from source_url when needed
+#
+# CONTENT PROCESSING OPTIMIZATION:
+# - content_max_chars: Default fallback when auto-detection fails
+# - auto_detect_context_limit: Automatically detects model context window
+#   * llama3.2: 128k tokens → ~16k chars for metadata extraction
+#   * gemini-1.5-flash: 1M tokens → ~32k chars for metadata extraction
+#   * Older models: 8k-16k chars based on their capabilities
+# - Uses 10% of context window (Ollama) or 1% (Gemini) for efficient processing
+
+# ============================================================================
 # VECTOR DATABASE CONFIGURATION
 # ============================================================================
 vector_db:
@@ -85,8 +171,8 @@ vector_db:
   
   # QDRANT CLOUD SETTINGS (Takes precedence if url is provided)
   # Uncomment and configure for Qdrant Cloud:
-  url: "https://your-cluster-url.gcp.cloud.qdrant.io:6333"  # Your Qdrant Cloud URL
-  api_key: ""                   # Your Qdrant Cloud API key (or use QDRANT_API_KEY env var)
+  #url: "https://your-cluster-url.gcp.cloud.qdrant.io:6333"  # Your Qdrant Cloud URL
+  #api_key: ""                   # Your Qdrant Cloud API key (or use QDRANT_API_KEY env var)
   
   # COLLECTION SETTINGS
   collection_name: "documents"    # Collection name for storing embeddings

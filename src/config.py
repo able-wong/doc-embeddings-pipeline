@@ -12,9 +12,14 @@ class DocumentsConfig(BaseModel):
     chunk_overlap: int = 200
 
 
-class GeminiConfig(BaseModel):
+class GeminiEmbeddingConfig(BaseModel):
     api_key: str = ""
     model: str = "text-embedding-004"
+
+
+class GeminiLLMConfig(BaseModel):
+    api_key: str = ""
+    model: str = "gemini-1.5-flash"
 
 
 class SentenceTransformersConfig(BaseModel):
@@ -27,8 +32,43 @@ class EmbeddingConfig(BaseModel):
     model: str = "nomic-embed-text"
     base_url: str = "http://localhost:11434"
     timeout: int = 60
-    gemini: Optional[GeminiConfig] = None
+    gemini: Optional[GeminiEmbeddingConfig] = None
     sentence_transformers: Optional[SentenceTransformersConfig] = None
+
+
+class LLMConfig(BaseModel):
+    provider: str = "ollama"
+    model: str = "llama3.2"
+    base_url: str = "http://localhost:11434"
+    timeout: int = 120
+    content_max_chars: int = 8000  # Maximum characters to send to LLM for analysis
+    auto_detect_context_limit: bool = True  # Automatically adjust based on model capabilities
+    gemini: Optional[GeminiLLMConfig] = None
+    metadata_extraction_prompt: str = """Extract metadata from this document:
+
+SOURCE URL: {source_url}
+FILENAME: {filename}
+CONTENT: {content}
+
+Please analyze the content, filename, and source URL to extract the following metadata. Return a valid JSON object with these exact fields:
+
+{{
+  "author": "string or null (extract from content first, then try source URL path if it looks like an author folder)",
+  "title": "string (prefer from content, fallback to cleaned filename)",
+  "publication_date": "YYYY-MM-DD or null (extract from content or filename pattern like 2025-03-04)",
+  "tags": ["array", "of", "relevant", "keywords", "from", "content"]
+}}
+
+Guidelines:
+- For author: 
+  1. First look in content for explicit mentions (e.g., "By John Doe", "Author: Jane Smith")
+  2. If not found, check if source URL has author-like folder structure (e.g., "articles/John Wong/file.html" → "John Wong")
+  3. Only extract if it clearly looks like a person's name, leave null if uncertain
+- For title: Prefer content title, but clean filename if needed (remove dates, convert dashes/underscores to spaces)
+- For publication_date: Look for dates in content first, then try filename patterns
+- For tags: Include 3-7 relevant keywords/topics from the content
+- Return valid JSON only, no other text"""
+    max_retries: int = 3
 
 
 class VectorDBConfig(BaseModel):
@@ -51,6 +91,7 @@ class LoggingConfig(BaseModel):
 class Config(BaseModel):
     documents: DocumentsConfig
     embedding: EmbeddingConfig
+    llm: Optional[LLMConfig] = None
     vector_db: VectorDBConfig
     logging: LoggingConfig
 
@@ -69,14 +110,26 @@ class Config(BaseModel):
                 model=os.getenv('EMBEDDING_MODEL', 'nomic-embed-text'),
                 base_url=os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434'),
                 timeout=int(os.getenv('EMBEDDING_TIMEOUT', '60')),
-                gemini=GeminiConfig(
+                gemini=GeminiEmbeddingConfig(
                     api_key=os.getenv('GEMINI_API_KEY', ''),
-                    model=os.getenv('GEMINI_MODEL', 'text-embedding-004')
+                    model=os.getenv('GEMINI_EMBEDDING_MODEL', 'text-embedding-004')
                 ) if os.getenv('EMBEDDING_PROVIDER') == 'gemini' else None,
                 sentence_transformers=SentenceTransformersConfig(
                     model=os.getenv('SENTENCE_TRANSFORMERS_MODEL', 'all-MiniLM-L6-v2'),
                     device=os.getenv('SENTENCE_TRANSFORMERS_DEVICE', 'cpu')
                 ) if os.getenv('EMBEDDING_PROVIDER') == 'sentence_transformers' else None
+            ),
+            llm=LLMConfig(
+                provider=os.getenv('LLM_PROVIDER', 'ollama'),
+                model=os.getenv('LLM_MODEL', 'llama3.2'),
+                base_url=os.getenv('LLM_BASE_URL', 'http://localhost:11434'),
+                timeout=int(os.getenv('LLM_TIMEOUT', '120')),
+                gemini=GeminiLLMConfig(
+                    api_key=os.getenv('GEMINI_API_KEY', ''),
+                    model=os.getenv('GEMINI_LLM_MODEL', 'gemini-1.5-flash')
+                ) if os.getenv('LLM_PROVIDER') == 'gemini' else None,
+                metadata_extraction_prompt=os.getenv('METADATA_EXTRACTION_PROMPT', LLMConfig().metadata_extraction_prompt),
+                max_retries=int(os.getenv('LLM_MAX_RETRIES', '3'))
             ),
             vector_db=VectorDBConfig(
                 provider=os.getenv('VECTOR_DB_PROVIDER', 'qdrant'),

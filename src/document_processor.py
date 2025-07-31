@@ -1,6 +1,6 @@
 import logging
 from pathlib import Path
-from typing import List
+from typing import List, Optional
 from dataclasses import dataclass
 from datetime import datetime
 import hashlib
@@ -16,12 +16,21 @@ from .config import DocumentsConfig
 @dataclass
 class DocumentMetadata:
     """Metadata for a processed document."""
-    file_path: str
-    filename: str
+    source_url: str  # Source URL with protocol (file:, https:) - renamed from file_url
     file_extension: str
     file_size: int
     last_modified: datetime
     content_hash: str
+    # New LLM-extracted metadata fields
+    author: Optional[str] = None
+    title: Optional[str] = None
+    publication_date: Optional[datetime] = None
+    tags: List[str] = None
+
+    def __post_init__(self):
+        """Initialize tags as empty list if None."""
+        if self.tags is None:
+            self.tags = []
 
 
 @dataclass
@@ -126,28 +135,61 @@ class DocumentProcessor:
         )
         return markdown_content
 
-    def create_document_metadata(self, file_path: Path, content: str) -> DocumentMetadata:
+    def create_document_metadata(self, file_path: Path, content: str, llm_provider=None) -> DocumentMetadata:
         """Create metadata for a document."""
         stat = file_path.stat()
         content_hash = hashlib.sha256(content.encode('utf-8')).hexdigest()
 
-        return DocumentMetadata(
-            file_path=str(file_path.relative_to(self.config.folder_path)),
-            filename=file_path.name,
+        # Create source URL with file: protocol for local files
+        relative_path = str(file_path.relative_to(self.config.folder_path))
+        source_url = f"file:{relative_path}"
+
+        # Base metadata
+        metadata = DocumentMetadata(
+            source_url=source_url,
             file_extension=file_path.suffix,
             file_size=stat.st_size,
             last_modified=datetime.fromtimestamp(stat.st_mtime),
             content_hash=content_hash
         )
 
-    def process_document(self, file_path: Path) -> List[DocumentChunk]:
+        # Extract additional metadata using LLM if provider is available
+        if llm_provider:
+            try:
+                filename = file_path.name  # Derived filename for LLM processing
+                self.logger.info(f"Extracting metadata using LLM for {filename}")
+                llm_metadata = llm_provider.extract_metadata(filename, content, metadata.source_url)
+                
+                # Update metadata with LLM-extracted fields
+                metadata.author = llm_metadata.get("author")
+                metadata.title = llm_metadata.get("title")
+                metadata.tags = llm_metadata.get("tags", [])
+                
+                # Parse publication_date if provided
+                if llm_metadata.get("publication_date"):
+                    try:
+                        from datetime import datetime as dt
+                        metadata.publication_date = dt.fromisoformat(llm_metadata["publication_date"])
+                    except (ValueError, TypeError) as e:
+                        self.logger.warning(f"Failed to parse publication_date '{llm_metadata['publication_date']}': {e}")
+                        metadata.publication_date = None
+                
+                self.logger.debug(f"LLM metadata extraction successful: {llm_metadata}")
+                
+            except Exception as e:
+                self.logger.error(f"LLM metadata extraction failed for {filename}: {e}")
+                # Continue with default metadata if LLM extraction fails
+
+        return metadata
+
+    def process_document(self, file_path: Path, llm_provider=None) -> List[DocumentChunk]:
         """Process a document and return chunks with metadata."""
         try:
             # Extract text and convert to markdown
             original_text = self.extract_text_from_file(file_path)
 
             # Create metadata
-            metadata = self.create_document_metadata(file_path, original_text)
+            metadata = self.create_document_metadata(file_path, original_text, llm_provider)
 
             # Split into chunks
             chunks = self.text_splitter.split_text(original_text)
