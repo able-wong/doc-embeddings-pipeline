@@ -8,11 +8,13 @@ documents, generates embeddings, and stores them in a vector database.
 
 import click
 import json
+
 import sys
 from datetime import datetime
 
 from src.config import load_config
 from src.pipeline import IngestionPipeline
+from src.utils import extract_filename_from_source_url
 
 
 def print_json(data):
@@ -109,7 +111,6 @@ def list_documents(ctx):
     click.echo("-" * 80)
 
     for doc in documents:
-        from src.utils import extract_filename_from_source_url
         filename = extract_filename_from_source_url(doc['source_url'])
         size_kb = doc['size'] / 1024
         modified = datetime.fromtimestamp(doc['last_modified']).strftime('%Y-%m-%d %H:%M:%S')
@@ -157,7 +158,6 @@ def search(ctx, query, limit, threshold):
         # Use title if available, otherwise extract filename from source_url
         display_name = result.get('title')
         if not display_name:
-            from src.utils import extract_filename_from_source_url
             display_name = extract_filename_from_source_url(result.get('source_url', ''))
         
         click.echo(f"\n{i}. {display_name} (Score: {result['score']:.4f})")
@@ -212,7 +212,6 @@ def search_rag(ctx, query, limit, threshold):
     click.echo("\nSOURCES:")
     click.echo("-" * 40)
     for source in result['sources']:
-        from src.utils import extract_filename_from_source_url
         display_name = extract_filename_from_source_url(source.get('source_url', ''))
         click.echo(f"[{source['index']}] {display_name} (Score: {source['score']:.4f})")
 

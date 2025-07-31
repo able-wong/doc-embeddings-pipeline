@@ -2,7 +2,7 @@
 
 from urllib.parse import urlparse
 from pathlib import Path
-
+import re
 
 def extract_filename_from_source_url(source_url: str) -> str:
     """
@@ -53,7 +53,6 @@ def clean_filename_for_title(filename: str) -> str:
     name = filename.rsplit('.', 1)[0]
     
     # Remove date patterns (YYYY-MM-DD)
-    import re
     name = re.sub(r'\d{4}-\d{2}-\d{2}_?', '', name)
     
     # Replace underscores and dashes with spaces
@@ -76,7 +75,6 @@ def extract_date_from_filename(filename: str) -> str:
     Returns:
         Date string in YYYY-MM-DD format or None
     """
-    import re
     
     # Look for YYYY-MM-DD pattern
     date_match = re.search(r'(\d{4}-\d{2}-\d{2})', filename)

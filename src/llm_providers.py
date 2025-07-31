@@ -10,6 +10,7 @@ from .utils import extract_filename_from_source_url, clean_filename_for_title, e
 from .content_shortener import ContentShortener
 
 
+
 class LLMProvider(ABC):
     """Abstract base class for LLM providers."""
 
@@ -22,6 +23,16 @@ class LLMProvider(ABC):
     def test_connection(self) -> bool:
         """Test if the LLM provider is accessible."""
         pass
+
+    def _get_fallback_metadata(self, filename: str, source_url: str = None) -> Dict[str, Any]:
+        """Get fallback metadata when LLM extraction fails. Uses extract_author_from_source_url for better fallback data."""
+        from .utils import extract_author_from_source_url
+        return {
+            "author": extract_author_from_source_url(source_url) if source_url else None,
+            "title": clean_filename_for_title(filename),
+            "publication_date": extract_date_from_filename(filename),
+            "tags": []
+        }
 
 
 class OllamaLLMProvider(LLMProvider):
@@ -198,14 +209,7 @@ class OllamaLLMProvider(LLMProvider):
 
         return self._get_fallback_metadata(filename, source_url)
 
-    def _get_fallback_metadata(self, filename: str, source_url: str = None) -> Dict[str, Any]:
-        """Get fallback metadata when LLM extraction fails."""
-        return {
-            "author": None,  # LLM should have handled source URL analysis
-            "title": clean_filename_for_title(filename),
-            "publication_date": extract_date_from_filename(filename),
-            "tags": []
-        }
+
 
     def test_connection(self) -> bool:
         """Test if Ollama is accessible and the model is available."""
@@ -402,14 +406,7 @@ class GeminiLLMProvider(LLMProvider):
 
         return self._get_fallback_metadata(filename, source_url)
 
-    def _get_fallback_metadata(self, filename: str, source_url: str = None) -> Dict[str, Any]:
-        """Get fallback metadata when LLM extraction fails."""
-        return {
-            "author": None,  # LLM should have handled source URL analysis
-            "title": clean_filename_for_title(filename),
-            "publication_date": extract_date_from_filename(filename),
-            "tags": []
-        }
+
 
     def test_connection(self) -> bool:
         """Test if Gemini API is accessible."""

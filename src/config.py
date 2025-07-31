@@ -130,7 +130,10 @@ class Config(BaseModel):
                     api_key=os.getenv('GEMINI_API_KEY', ''),
                     model=os.getenv('GEMINI_LLM_MODEL', 'gemini-1.5-flash')
                 ) if os.getenv('LLM_PROVIDER') == 'gemini' else None,
-                metadata_extraction_prompt=os.getenv('METADATA_EXTRACTION_PROMPT', LLMConfig().metadata_extraction_prompt),
+                metadata_extraction_prompt=os.getenv(
+                    'METADATA_EXTRACTION_PROMPT',
+                    LLMConfig.model_fields['metadata_extraction_prompt'].default
+                ),
                 max_retries=int(os.getenv('LLM_MAX_RETRIES', '3'))
             ),
             vector_db=VectorDBConfig(

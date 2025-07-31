@@ -3,6 +3,7 @@ from pathlib import Path
 from typing import List, Optional
 from dataclasses import dataclass
 from datetime import datetime
+from datetime import datetime as dt
 import hashlib
 
 import pypdf
@@ -168,7 +169,6 @@ class DocumentProcessor:
                 # Parse publication_date if provided
                 if llm_metadata.get("publication_date"):
                     try:
-                        from datetime import datetime as dt
                         metadata.publication_date = dt.fromisoformat(llm_metadata["publication_date"])
                     except (ValueError, TypeError) as e:
                         self.logger.warning(f"Failed to parse publication_date '{llm_metadata['publication_date']}': {e}")
