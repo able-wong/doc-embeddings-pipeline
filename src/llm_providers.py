@@ -7,6 +7,7 @@ import time
 import os
 from .config import LLMConfig
 from .utils import extract_filename_from_source_url, clean_filename_for_title, extract_date_from_filename
+from .content_shortener import ContentShortener
 
 
 class LLMProvider(ABC):
@@ -30,6 +31,7 @@ class OllamaLLMProvider(LLMProvider):
         self.config = config
         self.logger = logging.getLogger(__name__)
         self._context_limit = None
+        self.content_shortener = ContentShortener(chunk_size=1000, chunk_overlap=0)
 
     def _get_content_limit(self) -> int:
         """Get the appropriate content limit for this model."""
@@ -83,12 +85,12 @@ class OllamaLLMProvider(LLMProvider):
                 detected_limit = limit
                 break
         
-        # Use detected limit but cap it at reasonable amount for metadata extraction
-        # Even with 128k context, we don't need more than 16k chars for good metadata
+        # Use configurable percentage of context window for metadata extraction
         if detected_limit:
-            # Use 10% of context window, but at least 8k and at most 16k
-            auto_limit = max(8000, min(16000, detected_limit // 10))
-            self.logger.info(f"Auto-detected context limit for {self.config.model}: {auto_limit} chars (model supports ~{detected_limit//4000}k tokens)")
+            # Get utilization percentage from config (default 25%)
+            utilization = self.config.context_utilization
+            auto_limit = max(8000, int(detected_limit * utilization))
+            self.logger.info(f"Auto-detected context limit for {self.config.model}: {auto_limit} chars ({utilization*100:.0f}% of ~{detected_limit//4000}k tokens)")
         else:
             # Unknown model, use configured default
             auto_limit = self.config.content_max_chars
@@ -100,20 +102,36 @@ class OllamaLLMProvider(LLMProvider):
     def extract_metadata(self, filename: str, content: str, source_url: str = None) -> Dict[str, Any]:
         """Extract metadata from document using Ollama."""
         # Get appropriate content limit for this model
-        content_limit = self._get_content_limit()
+        total_limit = self._get_content_limit()
         
-        # Truncate content if too long, keeping room for prompt overhead
-        if len(content) > content_limit:
-            truncated_content = content[:content_limit]
-            self.logger.debug(f"Truncated content from {len(content)} to {content_limit} chars")
-        else:
-            truncated_content = content
-        
-        prompt = self.config.metadata_extraction_prompt.format(
+        # Calculate prompt overhead (everything except {content})
+        prompt_template = self.config.metadata_extraction_prompt
+        sample_prompt = prompt_template.format(
             source_url=source_url or "unknown",
             filename=filename,
-            content=truncated_content
+            content=""  # Empty content to measure overhead
         )
+        prompt_overhead = len(sample_prompt)
+        
+        # Reserve space for prompt structure, leaving rest for content
+        max_content_chars = max(1000, total_limit - prompt_overhead)  # At least 1k for content
+        
+        # Use intelligent content shortening instead of simple truncation
+        if len(content) > max_content_chars:
+            shortened_content = self.content_shortener.shorten_content(content, max_content_chars)
+            self.logger.info(f"Shortened content: {len(content)} → {len(shortened_content)} chars (overhead: {prompt_overhead}, total limit: {total_limit})")
+        else:
+            shortened_content = content
+            self.logger.debug(f"Content fits: {len(content)} chars (overhead: {prompt_overhead}, total limit: {total_limit})")
+        
+        prompt = prompt_template.format(
+            source_url=source_url or "unknown",
+            filename=filename,
+            content=shortened_content
+        )
+        
+        final_prompt_length = len(prompt)
+        self.logger.debug(f"Final prompt length: {final_prompt_length} chars")
 
         url = f"{self.config.base_url}/api/generate"
         payload = {
@@ -138,10 +156,17 @@ class OllamaLLMProvider(LLMProvider):
                 if not response_text:
                     raise ValueError("No response from Ollama")
 
-                # Parse JSON response
+                # Parse JSON response, stripping optional markdown code block
                 try:
-                    metadata = json.loads(response_text)
-                    
+                    import re
+                    # Remove markdown code block if present
+                    match = re.match(r"^```(?:json)?\s*([\s\S]*?)\s*```$", response_text.strip(), re.IGNORECASE)
+                    if match:
+                        json_str = match.group(1)
+                    else:
+                        json_str = response_text.strip()
+                    metadata = json.loads(json_str)
+
                     # Validate required fields and set defaults
                     validated_metadata = {
                         "author": metadata.get("author"),
@@ -149,17 +174,20 @@ class OllamaLLMProvider(LLMProvider):
                         "publication_date": metadata.get("publication_date"),
                         "tags": metadata.get("tags", [])
                     }
-                    
+
                     # Convert tags to list if it's not already
                     if not isinstance(validated_metadata["tags"], list):
                         validated_metadata["tags"] = []
-                    
+
+                    self.logger.debug(f"Successfully extracted metadata: {validated_metadata}")
                     return validated_metadata
 
                 except json.JSONDecodeError as e:
                     self.logger.warning(f"Failed to parse JSON response (attempt {attempt + 1}): {e}")
+                    self.logger.warning(f"Raw LLM response was: {repr(response_text[:500])}{'...' if len(response_text) > 500 else ''}")
                     if attempt == self.config.max_retries - 1:
                         # Last attempt failed, return fallback metadata
+                        self.logger.error(f"All {self.config.max_retries} attempts failed for {filename}, using fallback metadata")
                         return self._get_fallback_metadata(filename, source_url)
                     continue
 
@@ -227,6 +255,7 @@ class GeminiLLMProvider(LLMProvider):
         self.config = config
         self.logger = logging.getLogger(__name__)
         self._context_limit = None
+        self.content_shortener = ContentShortener(chunk_size=1000, chunk_overlap=0)
 
         if not config.gemini:
             raise ValueError("Gemini configuration is required when using Gemini LLM provider")
@@ -263,6 +292,10 @@ class GeminiLLMProvider(LLMProvider):
         model_name = self.gemini_config.model.lower()
         
         gemini_limits = {
+            'gemini-2.5-flash': 1000000 * 4,  # 1M tokens ≈ 4M characters
+            'gemini-2.5-pro': 2000000 * 4,
+            'gemini-2.0-flash': 1000000 * 4,  # 1M tokens ≈ 4M characters
+            'gemini-2.0-pro': 2000000 * 4,
             'gemini-1.5-flash': 1000000 * 4,    # 1M tokens ≈ 4M characters
             'gemini-1.5-pro': 2000000 * 4,      # 2M tokens ≈ 8M characters  
             'gemini-1.0-pro': 32768 * 4,        # 32k tokens ≈ 128k characters
@@ -277,9 +310,10 @@ class GeminiLLMProvider(LLMProvider):
                 break
         
         if detected_limit:
-            # Use 1% of context window for large models, but at least 8k and at most 32k
-            auto_limit = max(8000, min(32000, detected_limit // 100))
-            self.logger.info(f"Auto-detected context limit for {self.gemini_config.model}: {auto_limit} chars (model supports ~{detected_limit//4000}k tokens)")
+            # Get utilization percentage from config (default 25%)
+            utilization = self.config.context_utilization
+            auto_limit = max(8000, int(detected_limit * utilization))
+            self.logger.info(f"Auto-detected context limit for {self.gemini_config.model}: {auto_limit} chars ({utilization*100:.0f}% of ~{detected_limit//4000}k tokens)")
         else:
             # Unknown model, use configured default  
             auto_limit = self.config.content_max_chars
@@ -291,20 +325,36 @@ class GeminiLLMProvider(LLMProvider):
     def extract_metadata(self, filename: str, content: str, source_url: str = None) -> Dict[str, Any]:
         """Extract metadata from document using Gemini."""
         # Get appropriate content limit for this model
-        content_limit = self._get_content_limit()
+        total_limit = self._get_content_limit()
         
-        # Truncate content if too long, keeping room for prompt overhead
-        if len(content) > content_limit:
-            truncated_content = content[:content_limit]
-            self.logger.debug(f"Truncated content from {len(content)} to {content_limit} chars")
-        else:
-            truncated_content = content
-        
-        prompt = self.config.metadata_extraction_prompt.format(
+        # Calculate prompt overhead (everything except {content})
+        prompt_template = self.config.metadata_extraction_prompt
+        sample_prompt = prompt_template.format(
             source_url=source_url or "unknown",
             filename=filename,
-            content=truncated_content
+            content=""  # Empty content to measure overhead
         )
+        prompt_overhead = len(sample_prompt)
+        
+        # Reserve space for prompt structure, leaving rest for content
+        max_content_chars = max(1000, total_limit - prompt_overhead)  # At least 1k for content
+        
+        # Use intelligent content shortening instead of simple truncation
+        if len(content) > max_content_chars:
+            shortened_content = self.content_shortener.shorten_content(content, max_content_chars)
+            self.logger.info(f"Shortened content: {len(content)} → {len(shortened_content)} chars (overhead: {prompt_overhead}, total limit: {total_limit})")
+        else:
+            shortened_content = content
+            self.logger.debug(f"Content fits: {len(content)} chars (overhead: {prompt_overhead}, total limit: {total_limit})")
+        
+        prompt = prompt_template.format(
+            source_url=source_url or "unknown",
+            filename=filename,
+            content=shortened_content
+        )
+        
+        final_prompt_length = len(prompt)
+        self.logger.debug(f"Final prompt length: {final_prompt_length} chars")
 
         for attempt in range(self.config.max_retries):
             try:
@@ -323,8 +373,15 @@ class GeminiLLMProvider(LLMProvider):
 
                 # Parse JSON response
                 try:
-                    metadata = json.loads(response_text)
-                    
+                    import re
+                    # Remove markdown code block if present
+                    match = re.match(r"^```(?:json)?\s*([\s\S]*?)\s*```$", response_text.strip(), re.IGNORECASE)
+                    if match:
+                        json_str = match.group(1)
+                    else:
+                        json_str = response_text.strip()
+                    metadata = json.loads(json_str)
+                                        
                     # Validate required fields and set defaults
                     validated_metadata = {
                         "author": metadata.get("author"),
@@ -337,11 +394,14 @@ class GeminiLLMProvider(LLMProvider):
                     if not isinstance(validated_metadata["tags"], list):
                         validated_metadata["tags"] = []
                     
+                    self.logger.debug(f"Successfully extracted metadata: {validated_metadata}")
                     return validated_metadata
 
                 except json.JSONDecodeError as e:
                     self.logger.warning(f"Failed to parse JSON response (attempt {attempt + 1}): {e}")
+                    self.logger.warning(f"Raw LLM response was: {repr(response_text[:500])}{'...' if len(response_text) > 500 else ''}")
                     if attempt == self.config.max_retries - 1:
+                        self.logger.error(f"All {self.config.max_retries} attempts failed for {filename}, using fallback metadata")
                         return self._get_fallback_metadata(filename, source_url)
                     continue
 

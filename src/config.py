@@ -43,31 +43,30 @@ class LLMConfig(BaseModel):
     timeout: int = 120
     content_max_chars: int = 8000  # Maximum characters to send to LLM for analysis
     auto_detect_context_limit: bool = True  # Automatically adjust based on model capabilities
+    context_utilization: float = 0.25  # Percentage of context window to use (0.25 = 25%)
     gemini: Optional[GeminiLLMConfig] = None
-    metadata_extraction_prompt: str = """Extract metadata from this document:
+    metadata_extraction_prompt: str = """You are a metadata extraction assistant. Your task is to analyze the provided document and extract specific metadata fields.
 
-SOURCE URL: {source_url}
-FILENAME: {filename}
-CONTENT: {content}
-
-Please analyze the content, filename, and source URL to extract the following metadata. Return a valid JSON object with these exact fields:
+Return a valid JSON object with these exact fields:
 
 {{
-  "author": "string or null (extract from content first, then try source URL path if it looks like an author folder)",
-  "title": "string (prefer from content, fallback to cleaned filename)",
-  "publication_date": "YYYY-MM-DD or null (extract from content or filename pattern like 2025-03-04)",
-  "tags": ["array", "of", "relevant", "keywords", "from", "content"]
+  "author": "string or null",
+  "title": "string", 
+  "publication_date": "YYYY-MM-DD or null",
+  "tags": ["topic1", "topic2", "topic3"]
 }}
 
 Guidelines:
-- For author: 
-  1. First look in content for explicit mentions (e.g., "By John Doe", "Author: Jane Smith")
-  2. If not found, check if source URL has author-like folder structure (e.g., "articles/John Wong/file.html" → "John Wong")
-  3. Only extract if it clearly looks like a person's name, leave null if uncertain
-- For title: Prefer content title, but clean filename if needed (remove dates, convert dashes/underscores to spaces)
-- For publication_date: Look for dates in content first, then try filename patterns
-- For tags: Include 3-7 relevant keywords/topics from the content
-- Return valid JSON only, no other text"""
+- Author: Look for "By [Name]", "Author: [Name]", "[Name] writes", or extract from URL paths like "/authors/name/" or "/john-doe/"
+- Title: Extract from content headers/titles, or clean filename (remove dates, convert dashes to spaces)
+- Date: Find "Published", "Posted", dates like "Jan 2025", "2025-01-20", "January 20, 2025", or YYYY-MM-DD in filename
+- Tags: Extract 3-7 relevant keywords/topics from the actual content
+- Return valid JSON only, no other text
+
+Document to analyze:
+SOURCE URL: {source_url}
+FILENAME: {filename}
+CONTENT: {content}"""
     max_retries: int = 3
 
 
@@ -124,6 +123,9 @@ class Config(BaseModel):
                 model=os.getenv('LLM_MODEL', 'llama3.2'),
                 base_url=os.getenv('LLM_BASE_URL', 'http://localhost:11434'),
                 timeout=int(os.getenv('LLM_TIMEOUT', '120')),
+                content_max_chars=int(os.getenv('LLM_CONTENT_MAX_CHARS', '8000')),
+                auto_detect_context_limit=os.getenv('LLM_AUTO_DETECT_CONTEXT', 'true').lower() == 'true',
+                context_utilization=float(os.getenv('LLM_CONTEXT_UTILIZATION', '0.25')),
                 gemini=GeminiLLMConfig(
                     api_key=os.getenv('GEMINI_API_KEY', ''),
                     model=os.getenv('GEMINI_LLM_MODEL', 'gemini-1.5-flash')
