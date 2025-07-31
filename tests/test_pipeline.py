@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch, MagicMock
 from pathlib import Path
 
 from src.pipeline import IngestionPipeline
-from src.config import Config, DocumentsConfig, EmbeddingConfig, VectorDBConfig, LoggingConfig
+from src.config import Config, DocumentsConfig, EmbeddingConfig, LLMConfig, VectorDBConfig, LoggingConfig
 from src.document_processor import DocumentChunk, DocumentMetadata
 from datetime import datetime
 
@@ -24,6 +24,12 @@ def test_config():
             base_url="http://localhost:11434",
             timeout=60
         ),
+        llm=LLMConfig(
+            provider="ollama",
+            model="test-llm-model",
+            base_url="http://localhost:11434",
+            timeout=120
+        ),
         vector_db=VectorDBConfig(
             provider="qdrant",
             host="localhost",
@@ -39,8 +45,7 @@ def test_config():
 def sample_chunk():
     """Create a sample document chunk for testing."""
     metadata = DocumentMetadata(
-        file_path="test.txt",
-        filename="test.txt",
+        source_url="file:test.txt",  # Updated to use source_url
         file_extension=".txt",
         file_size=100,
         last_modified=datetime.now(),
@@ -56,34 +61,42 @@ def sample_chunk():
     )
 
 
+@patch('src.pipeline.create_llm_provider')
 @patch('src.pipeline.create_vector_store')
 @patch('src.pipeline.create_embedding_provider')
 @patch('src.pipeline.DocumentProcessor')
-def test_pipeline_initialization(mock_doc_processor, mock_embedding_provider, mock_vector_store, test_config):
+def test_pipeline_initialization(mock_doc_processor, mock_embedding_provider, mock_vector_store, mock_llm_provider, test_config):
     """Test pipeline initialization."""
     # Mock the components
     mock_doc_processor.return_value = Mock()
     mock_embedding_provider.return_value = Mock()
     mock_vector_store.return_value = Mock()
+    mock_llm_provider.return_value = Mock()
 
     pipeline = IngestionPipeline(test_config)
 
     assert pipeline.config == test_config
     assert pipeline.document_processor is not None
     assert pipeline.embedding_provider is not None
+    assert pipeline.llm_provider is not None
     assert pipeline.vector_store is not None
 
 
+@patch('src.pipeline.create_llm_provider')
 @patch('src.pipeline.create_vector_store')
 @patch('src.pipeline.create_embedding_provider')
 @patch('src.pipeline.DocumentProcessor')
-def test_test_connections(mock_doc_processor, mock_embedding_provider, mock_vector_store, test_config):
+def test_test_connections(mock_doc_processor, mock_embedding_provider, mock_vector_store, mock_llm_provider, test_config):
     """Test connection testing."""
     # Mock the components
     mock_doc_processor.return_value = Mock()
     mock_embedding = Mock()
     mock_embedding.test_connection.return_value = True
     mock_embedding_provider.return_value = mock_embedding
+
+    mock_llm = Mock()
+    mock_llm.test_connection.return_value = True
+    mock_llm_provider.return_value = mock_llm
 
     mock_vector = Mock()
     mock_vector.test_connection.return_value = True
@@ -93,6 +106,7 @@ def test_test_connections(mock_doc_processor, mock_embedding_provider, mock_vect
     results = pipeline.test_connections()
 
     assert results['embedding_provider'] is True
+    assert results['llm_provider'] is True
     assert results['vector_store'] is True
 
 
@@ -187,7 +201,7 @@ def test_add_or_update_document_success(mock_doc_processor, mock_embedding_provi
     result = pipeline.add_or_update_document("test.txt")
 
     assert result is True
-    mock_vector.delete_document.assert_called_once_with("test.txt")
+    mock_vector.delete_document.assert_called_once_with("file:test.txt")
     mock_vector.insert_documents.assert_called_once()
 
 

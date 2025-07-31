@@ -3,7 +3,7 @@ from unittest.mock import Mock, patch
 import requests
 
 from src.embedding_providers import OllamaEmbeddingProvider, GeminiEmbeddingProvider, SentenceTransformersEmbeddingProvider, create_embedding_provider
-from src.config import EmbeddingConfig, GeminiConfig, SentenceTransformersConfig
+from src.config import EmbeddingConfig, GeminiEmbeddingConfig, SentenceTransformersConfig
 
 
 @pytest.fixture
@@ -31,7 +31,7 @@ def test_create_embedding_provider_ollama(embedding_config):
 
 def test_create_embedding_provider_gemini():
     """Test creating a Gemini embedding provider."""
-    gemini_config = GeminiConfig(api_key="test_key", model="text-embedding-004")
+    gemini_config = GeminiEmbeddingConfig(api_key="test_key", model="text-embedding-004")
     config = EmbeddingConfig(provider="gemini", gemini=gemini_config)
 
     with patch('google.generativeai.configure'):
@@ -201,7 +201,7 @@ def gemini_config():
     """Create a test Gemini configuration."""
     return EmbeddingConfig(
         provider="gemini",
-        gemini=GeminiConfig(api_key="test_key", model="text-embedding-004")
+        gemini=GeminiEmbeddingConfig(api_key="test_key", model="text-embedding-004")
     )
 
 
@@ -219,7 +219,7 @@ def test_gemini_provider_missing_api_key(mock_genai):
     """Test Gemini provider with missing API key."""
     config = EmbeddingConfig(
         provider="gemini",
-        gemini=GeminiConfig(api_key="", model="text-embedding-004")
+        gemini=GeminiEmbeddingConfig(api_key="", model="text-embedding-004")
     )
 
     with pytest.raises(ValueError, match="Gemini API key is required"):
@@ -232,7 +232,7 @@ def test_gemini_provider_env_api_key(mock_genai):
     """Test Gemini provider using environment variable for API key."""
     config = EmbeddingConfig(
         provider="gemini",
-        gemini=GeminiConfig(api_key="", model="text-embedding-004")  # Empty key, should use env
+        gemini=GeminiEmbeddingConfig(api_key="", model="text-embedding-004")  # Empty key, should use env
     )
 
     provider = GeminiEmbeddingProvider(config)

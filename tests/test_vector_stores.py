@@ -34,8 +34,7 @@ def qdrant_store(vector_db_config):
 def sample_chunk():
     """Create a sample document chunk for testing."""
     metadata = DocumentMetadata(
-        file_path="test.txt",
-        filename="test.txt",
+        source_url="file:test.txt",  # Updated to use source_url
         file_extension=".txt",
         file_size=100,
         last_modified=datetime.now(),

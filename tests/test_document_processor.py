@@ -128,12 +128,16 @@ def test_create_document_metadata(document_processor, temp_docs_folder):
 
     metadata = document_processor.create_document_metadata(test_file, content)
 
-    assert metadata.filename == "test.txt"
+    assert metadata.source_url == "file:test.txt"  # Now uses source_url with file: protocol
     assert metadata.file_extension == ".txt"
-    assert metadata.file_path == "test.txt"
     assert isinstance(metadata.last_modified, datetime)
     assert metadata.content_hash is not None
     assert len(metadata.content_hash) == 64  # SHA256 hash length
+    # New LLM-extracted metadata fields should be None without LLM provider
+    assert metadata.author is None
+    assert metadata.title is None
+    assert metadata.publication_date is None
+    assert metadata.tags == []
 
 
 def test_process_document(document_processor, temp_docs_folder):
@@ -149,7 +153,7 @@ def test_process_document(document_processor, temp_docs_folder):
     assert isinstance(chunk, DocumentChunk)
     assert chunk.chunk_text == "This is a test document with some content."
     assert chunk.original_text == "This is a test document with some content."
-    assert chunk.metadata.filename == "test.txt"
+    assert chunk.metadata.source_url == "file:test.txt"  # Now uses source_url
     assert chunk.chunk_index == 0
     assert chunk.chunk_id is not None
 
@@ -197,10 +201,10 @@ def test_process_all_documents(document_processor, temp_docs_folder):
     # Should process both .txt and .md files
     assert len(all_chunks) >= 2
 
-    # Check that we have chunks from different files
-    file_paths = {chunk.metadata.filename for chunk in all_chunks}
-    assert "test.txt" in file_paths
-    assert "test.md" in file_paths
+    # Check that we have chunks from different files using source_url
+    source_urls = {chunk.metadata.source_url for chunk in all_chunks}
+    assert "file:test.txt" in source_urls
+    assert "file:test.md" in source_urls
 
 
 def test_extract_text_from_file_unsupported_extension(document_processor):

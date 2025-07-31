@@ -8,11 +8,13 @@ documents, generates embeddings, and stores them in a vector database.
 
 import click
 import json
+
 import sys
 from datetime import datetime
 
 from src.config import load_config
 from src.pipeline import IngestionPipeline
+from src.utils import extract_filename_from_source_url
 
 
 def print_json(data):
@@ -109,9 +111,10 @@ def list_documents(ctx):
     click.echo("-" * 80)
 
     for doc in documents:
+        filename = extract_filename_from_source_url(doc['source_url'])
         size_kb = doc['size'] / 1024
         modified = datetime.fromtimestamp(doc['last_modified']).strftime('%Y-%m-%d %H:%M:%S')
-        click.echo(f"{doc['filename']:<40} {doc['extension']:<6} {size_kb:>8.1f} KB  {modified}")
+        click.echo(f"{filename:<40} {doc['extension']:<6} {size_kb:>8.1f} KB  {modified}")
 
 
 @cli.command()
@@ -152,9 +155,22 @@ def search(ctx, query, limit, threshold):
         return
 
     for i, result in enumerate(results, 1):
-        click.echo(f"\n{i}. {result['filename']} (Score: {result['score']:.4f})")
-        click.echo(f"   Path: {result['file_path']}")
+        # Use title if available, otherwise extract filename from source_url
+        display_name = result.get('title')
+        if not display_name:
+            display_name = extract_filename_from_source_url(result.get('source_url', ''))
+        
+        click.echo(f"\n{i}. {display_name} (Score: {result['score']:.4f})")
+        click.echo(f"   Source: {result['source_url']}")
         click.echo(f"   Chunk {result['chunk_index']}:")
+        
+        # Show new metadata fields if available
+        if result.get('author'):
+            click.echo(f"   Author: {result['author']}")
+        if result.get('publication_date'):
+            click.echo(f"   Published: {result['publication_date']}")
+        if result.get('tags'):
+            click.echo(f"   Tags: {', '.join(result['tags'])}")
 
         # Truncate long text for display
         text = result['chunk_text']
@@ -196,7 +212,8 @@ def search_rag(ctx, query, limit, threshold):
     click.echo("\nSOURCES:")
     click.echo("-" * 40)
     for source in result['sources']:
-        click.echo(f"[{source['index']}] {source['filename']} (Score: {source['score']:.4f})")
+        display_name = extract_filename_from_source_url(source.get('source_url', ''))
+        click.echo(f"[{source['index']}] {display_name} (Score: {source['score']:.4f})")
 
 
 @cli.command()
@@ -215,25 +232,36 @@ def stats(ctx):
 @cli.command()
 @click.pass_context
 def test_connections(ctx):
-    """Test connections to Ollama and the Vector Database servers."""
+    """Test connections to embedding provider and vector database."""
     pipeline = ctx.obj['pipeline']
 
     click.echo("Testing connections...")
     click.echo("-" * 40)
 
     results = pipeline.test_connections()
+    config = ctx.obj['config']
 
     # Test embedding provider
+    provider_name = config.embedding.provider.replace('_', ' ').title()
     if results.get('embedding_provider'):
-        click.echo("✓ Embedding provider (Ollama) connection successful")
+        click.echo(f"✓ Embedding provider ({provider_name}) connection successful")
     else:
-        click.echo("✗ Embedding provider (Ollama) connection failed", err=True)
+        click.echo(f"✗ Embedding provider ({provider_name}) connection failed", err=True)
 
     # Test vector store
+    vector_store_name = config.vector_db.provider.title()
+    connection_type = "Cloud" if config.vector_db.url else "Local"
     if results.get('vector_store'):
-        click.echo("✓ Vector store (Qdrant) connection successful")
+        click.echo(f"✓ Vector store ({vector_store_name} {connection_type}) connection successful")
     else:
-        click.echo("✗ Vector store (Qdrant) connection failed", err=True)
+        click.echo(f"✗ Vector store ({vector_store_name} {connection_type}) connection failed", err=True)
+
+    # Test LLM provider
+    llm_provider_name = config.llm.provider.replace('_', ' ').title()
+    if results.get('llm_provider'):
+        click.echo(f"✓ LLM provider ({llm_provider_name}) connection successful")
+    else:
+        click.echo(f"✗ LLM provider ({llm_provider_name}) connection failed", err=True)
 
     # Overall status
     all_connected = all(results.values())

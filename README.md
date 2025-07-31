@@ -134,7 +134,7 @@ ollama serve                    # If using Ollama
 # If using local Qdrant with Docker:
 docker run -d --name qdrant \
     -p 6333:6333 -p 6334:6334 \
-    -v $(pwd)/qdrant_storage:/qdrant/storage:z \
+    -v $(pwd)/qdrant_storage:/qdrant/storage \
     qdrant/qdrant
 
 # Test connections
@@ -219,12 +219,14 @@ vector_db:
 The pipeline supports complete configuration via environment variables, perfect for serverless deployments and containerized environments.
 
 #### API Keys (Recommended)
+
 ```bash
 export GEMINI_API_KEY="your-gemini-key"
 export QDRANT_API_KEY="your-qdrant-key"
 ```
 
 #### Complete Environment Variable Configuration
+
 Set `CONFIG_FROM_ENV=true` to use environment variables instead of config files:
 
 ```bash
@@ -258,6 +260,7 @@ export LOG_LEVEL="INFO"                               # DEBUG, INFO, WARNING, ER
 ```
 
 #### Usage Examples
+
 ```bash
 # Serverless deployment (no config file needed)
 CONFIG_FROM_ENV=true \
