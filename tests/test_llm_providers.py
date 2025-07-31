@@ -65,10 +65,9 @@ class TestOllamaLLMProvider:
     def test_get_content_limit_auto_detect(self, ollama_config):
         """Test intelligent content limit detection for llama3.2."""
         provider = OllamaLLMProvider(ollama_config)
-        
-        # Should detect llama3.2 has 128k context and use 16k chars
+        # Should detect llama3.2 has 128k tokens and use 128k chars (128000 * 0.25 * 4)
         limit = provider._get_content_limit()
-        assert limit == 16000
+        assert limit == 128000
         
     def test_get_content_limit_disabled(self, ollama_config):
         """Test content limit when auto-detection is disabled."""
@@ -189,10 +188,9 @@ class TestGeminiLLMProvider:
         with patch('google.generativeai.configure'):
             with patch('google.generativeai.GenerativeModel'):
                 provider = GeminiLLMProvider(gemini_config)
-                
-                # Should detect gemini-1.5-flash has 1M context and use 32k chars
+                # Should detect gemini-1.5-flash has 1M tokens and use 1M chars (1000000 * 0.25 * 4)
                 limit = provider._get_content_limit()
-                assert limit == 32000
+                assert limit == 1000000
     
     @patch('google.generativeai.configure')
     @patch('google.generativeai.GenerativeModel')

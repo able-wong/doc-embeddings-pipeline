@@ -46,36 +46,31 @@ class OllamaLLMProvider(LLMProvider):
         # Model-specific context window detection
         model_name = self.config.model.lower()
         
-        # Ollama model context window mappings (characters ≈ tokens * 4)
+        # Ollama model context window mappings (tokens)
         model_limits = {
             # Llama models
-            'llama3.2': 128000 * 4,  # 128k tokens ≈ 512k characters
-            'llama3.2:1b': 128000 * 4,
-            'llama3.2:3b': 128000 * 4,
-            'llama3.1': 128000 * 4,
-            'llama3': 8192 * 4,      # 8k tokens ≈ 32k characters
-            'llama2': 4096 * 4,      # 4k tokens ≈ 16k characters
-            
+            'llama3.2': 128000,  # 128k tokens
+            'llama3.2:1b': 128000,
+            'llama3.2:3b': 128000,
+            'llama3.1': 128000,
+            'llama3': 8192,      # 8k tokens
+            'llama2': 4096,      # 4k tokens
             # Gemma models  
-            'gemma': 8192 * 4,
-            'gemma2': 8192 * 4,
-            'gemma3': 8192 * 4,
-            
+            'gemma': 8192,
+            'gemma2': 8192,
+            'gemma3': 8192,
             # Qwen models
-            'qwen2.5': 32768 * 4,    # 32k tokens ≈ 128k characters
-            'qwen2': 32768 * 4,
-            'qwen': 8192 * 4,
-            
+            'qwen2.5': 32768,    # 32k tokens
+            'qwen2': 32768,
+            'qwen': 8192,
             # Mistral models
-            'mistral': 8192 * 4,
-            'mixtral': 32768 * 4,
-            
+            'mistral': 8192,
+            'mixtral': 32768,
             # CodeLlama models
-            'codellama': 16384 * 4,  # 16k tokens ≈ 64k characters
-            
+            'codellama': 16384,  # 16k tokens
             # DeepSeek models
-            'deepseek': 16384 * 4,
-            'deepseek-coder': 16384 * 4,
+            'deepseek': 16384,
+            'deepseek-coder': 16384,
         }
         
         # Find matching model limit
@@ -84,18 +79,16 @@ class OllamaLLMProvider(LLMProvider):
             if model_name.startswith(model_prefix):
                 detected_limit = limit
                 break
-        
         # Use configurable percentage of context window for metadata extraction
         if detected_limit:
             # Get utilization percentage from config (default 25%)
             utilization = self.config.context_utilization
-            auto_limit = max(8000, int(detected_limit * utilization))
-            self.logger.info(f"Auto-detected context limit for {self.config.model}: {auto_limit} chars ({utilization*100:.0f}% of ~{detected_limit//4000}k tokens)")
+            auto_limit = max(8000, int(detected_limit * utilization * 4))  # tokens * utilization * 4 (chars)
+            self.logger.info(f"Auto-detected context limit for {self.config.model}: {auto_limit} chars ({utilization*100:.0f}% of {detected_limit} tokens)")
         else:
             # Unknown model, use configured default
             auto_limit = self.config.content_max_chars
             self.logger.warning(f"Unknown model {self.config.model}, using configured limit: {auto_limit} chars")
-        
         self._context_limit = auto_limit
         return self._context_limit
 
@@ -288,37 +281,33 @@ class GeminiLLMProvider(LLMProvider):
             self._context_limit = self.config.content_max_chars
             return self._context_limit
         
-        # Gemini model context window mappings
+        # Gemini model context window mappings (tokens)
         model_name = self.gemini_config.model.lower()
-        
         gemini_limits = {
-            'gemini-2.5-flash': 1000000 * 4,  # 1M tokens ≈ 4M characters
-            'gemini-2.5-pro': 2000000 * 4,
-            'gemini-2.0-flash': 1000000 * 4,  # 1M tokens ≈ 4M characters
-            'gemini-2.0-pro': 2000000 * 4,
-            'gemini-1.5-flash': 1000000 * 4,    # 1M tokens ≈ 4M characters
-            'gemini-1.5-pro': 2000000 * 4,      # 2M tokens ≈ 8M characters  
-            'gemini-1.0-pro': 32768 * 4,        # 32k tokens ≈ 128k characters
-            'gemini-pro': 32768 * 4,             # 32k tokens ≈ 128k characters
+            'gemini-2.5-flash': 1000000,  # 1M tokens
+            'gemini-2.5-pro': 2000000,
+            'gemini-2.0-flash': 1000000,  # 1M tokens
+            'gemini-2.0-pro': 2000000,
+            'gemini-1.5-flash': 1000000,    # 1M tokens
+            'gemini-1.5-pro': 2000000,      # 2M tokens
+            'gemini-1.0-pro': 32768,        # 32k tokens
+            'gemini-pro': 32768,            # 32k tokens
         }
-        
         # Find matching model limit
         detected_limit = None
         for model_prefix, limit in gemini_limits.items():
             if model_name.startswith(model_prefix):
                 detected_limit = limit
                 break
-        
         if detected_limit:
             # Get utilization percentage from config (default 25%)
             utilization = self.config.context_utilization
-            auto_limit = max(8000, int(detected_limit * utilization))
-            self.logger.info(f"Auto-detected context limit for {self.gemini_config.model}: {auto_limit} chars ({utilization*100:.0f}% of ~{detected_limit//4000}k tokens)")
+            auto_limit = max(8000, int(detected_limit * utilization * 4))  # tokens * utilization * 4 (chars)
+            self.logger.info(f"Auto-detected context limit for {self.gemini_config.model}: {auto_limit} chars ({utilization*100:.0f}% of {detected_limit} tokens)")
         else:
             # Unknown model, use configured default  
             auto_limit = self.config.content_max_chars
             self.logger.warning(f"Unknown Gemini model {self.gemini_config.model}, using configured limit: {auto_limit} chars")
-        
         self._context_limit = auto_limit
         return self._context_limit
 

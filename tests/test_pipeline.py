@@ -201,7 +201,7 @@ def test_add_or_update_document_success(mock_doc_processor, mock_embedding_provi
     result = pipeline.add_or_update_document("test.txt")
 
     assert result is True
-    mock_vector.delete_document.assert_called_once_with("test.txt")
+    mock_vector.delete_document.assert_called_once_with("file:test.txt")
     mock_vector.insert_documents.assert_called_once()
 
 

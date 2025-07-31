@@ -236,16 +236,28 @@ class IngestionPipeline:
                 if score < threshold:
                     continue
 
+                payload = result.get('payload', {})
+                # Try to get filename from payload, else parse from source_url
+                filename = payload.get('filename')
+                if not filename:
+                    source_url = payload.get('source_url', '')
+                    # If source_url is like 'file:some/path/file.txt', extract last part
+                    if source_url.startswith('file:'):
+                        filename = source_url.split(':', 1)[1].split('/')[-1]
+                    else:
+                        filename = ''
+
                 formatted_result = {
                     'score': score,
-                    'source_url': result.get('payload', {}).get('source_url', ''),
-                    'chunk_text': result.get('payload', {}).get('chunk_text', ''),
-                    'chunk_index': result.get('payload', {}).get('chunk_index', 0),
+                    'source_url': payload.get('source_url', ''),
+                    'filename': filename,
+                    'chunk_text': payload.get('chunk_text', ''),
+                    'chunk_index': payload.get('chunk_index', 0),
                     # Include new metadata fields
-                    'author': result.get('payload', {}).get('author'),
-                    'title': result.get('payload', {}).get('title'),
-                    'publication_date': result.get('payload', {}).get('publication_date'),
-                    'tags': result.get('payload', {}).get('tags', [])
+                    'author': payload.get('author'),
+                    'title': payload.get('title'),
+                    'publication_date': payload.get('publication_date'),
+                    'tags': payload.get('tags', [])
                 }
                 formatted_results.append(formatted_result)
 
@@ -308,6 +320,7 @@ class IngestionPipeline:
                 stat = file_path.stat()
                 documents.append({
                     'source_url': f"file:{file_path.relative_to(self.config.documents.folder_path)}",
+                    'filename': file_path.name,
                     'extension': file_path.suffix,
                     'size': stat.st_size,
                     'last_modified': stat.st_mtime
