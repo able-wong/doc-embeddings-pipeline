@@ -62,6 +62,14 @@ class VectorStore(ABC):
 
 class QdrantVectorStore(VectorStore):
     """Qdrant vector store implementation supporting both local and cloud instances."""
+    
+    # Schema types for payload indices
+    PAYLOAD_SCHEMA_TYPES = {
+        'tags': None,  # Will be set after import
+        'author': None,
+        'title': None,
+        'publication_date': None,
+    }
 
     def __init__(self, config: VectorDBConfig):
         self.config = config
@@ -69,6 +77,16 @@ class QdrantVectorStore(VectorStore):
 
         try:
             from qdrant_client import QdrantClient
+            from qdrant_client.models import PayloadSchemaType
+            
+            # Initialize schema types after import
+            if QdrantVectorStore.PAYLOAD_SCHEMA_TYPES['tags'] is None:
+                QdrantVectorStore.PAYLOAD_SCHEMA_TYPES.update({
+                    'tags': PayloadSchemaType.KEYWORD,
+                    'author': PayloadSchemaType.KEYWORD,
+                    'title': PayloadSchemaType.KEYWORD,
+                    'publication_date': PayloadSchemaType.DATETIME,
+                })
         except ImportError:
             raise ImportError("qdrant-client library is required. Install with: pip install qdrant-client")
 
@@ -289,18 +307,8 @@ class QdrantVectorStore(VectorStore):
             for field in fields:
                 try:
                     # Determine appropriate schema type based on field
-                    if field == 'tags':
-                        # Tags are arrays of strings - use keyword schema
-                        schema_type = PayloadSchemaType.KEYWORD
-                    elif field in ['author', 'title']:
-                        # String fields - use keyword schema for exact matching
-                        schema_type = PayloadSchemaType.KEYWORD
-                    elif field == 'publication_date':
-                        # Date fields stored as ISO strings - use datetime schema for proper temporal indexing
-                        schema_type = PayloadSchemaType.DATETIME
-                    else:
-                        # Default to keyword for unknown fields
-                        schema_type = PayloadSchemaType.KEYWORD
+                    from qdrant_client.models import PayloadSchemaType
+                    schema_type = self.PAYLOAD_SCHEMA_TYPES.get(field, PayloadSchemaType.KEYWORD)
                     
                     self.client.create_payload_index(
                         collection_name=self.config.collection_name,
@@ -316,7 +324,7 @@ class QdrantVectorStore(VectorStore):
                     continue
             
             self.logger.info(f"Created {success_count}/{len(fields)} payload indices")
-            return success_count > 0
+            return success_count == len(fields)
             
         except Exception as e:
             self.logger.error(f"Error creating payload indices: {e}")

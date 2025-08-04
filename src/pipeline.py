@@ -174,7 +174,7 @@ class IngestionPipeline:
                 return False
 
             # Ensure payload indices exist for metadata fields
-            required_indices = ['tags', 'author', 'publication_date']
+            required_indices = ['tags', 'author', 'publication_date', 'title']
             self.logger.info("Ensuring payload indices exist for metadata fields...")
             if not self.vector_store.ensure_payload_indices(required_indices):
                 self.logger.warning("Some payload indices could not be created, but continuing with reindexing")
