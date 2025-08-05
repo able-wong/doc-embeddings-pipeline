@@ -31,6 +31,7 @@ This pipeline serves as the **foundation for RAG systems**, handling the critica
 - PDF documents (.pdf)
 - HTML pages (.html)
 - JSON structured content (.json)
+- **Article fetcher** - Direct URL processing with AI analysis
 - Automatic markdown conversion for consistent processing
 
 ### 🗄️ **Flexible Vector Storage**
@@ -82,6 +83,87 @@ graph TB
 ```
 
 ## 🚀 Quick Start
+
+### Option 1: Build Knowledge Base from Online Articles (Fastest)
+
+Perfect for quickly building a knowledge base from online content:
+
+```bash
+# Clone and setup
+git clone https://github.com/able-wong/doc-embeddings-pipeline.git
+cd doc-embeddings-pipeline
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+
+# Quick configuration - use Sentence Transformers (no external dependencies)
+cp config.yaml.example config.yaml
+# Edit config.yaml: set embedding.provider: "sentence_transformers"
+
+# Start local Qdrant (one-time setup)
+docker run -d --name qdrant -p 6333:6333 -v $(pwd)/qdrant_storage:/qdrant/storage qdrant/qdrant
+
+# Build your knowledge base from articles (creates viewable HTML files)
+python fetch_article.py --non-interactive --output-format=html \
+  https://example.com/article1 \
+  https://example.com/article2 \
+  https://example.com/article3
+
+# View the processed articles (open in browser to see AI analysis)
+open documents/html/*.html
+
+# Also create JSON format for vector database ingestion
+python fetch_article.py --non-interactive --output-format=json \
+  https://example.com/article1 \
+  https://example.com/article2 \
+  https://example.com/article3
+
+# Ingest into vector database
+python3 ingest.py reindex-all
+
+# Search your knowledge base
+python3 ingest.py search "your query here"
+```
+
+### Option 2: Process Local Documents
+
+For existing document collections:
+
+```bash
+# Same setup as above, then:
+
+# Add your documents to ./documents folder
+# Supported: .txt, .docx, .pdf, .md, .html, .json
+
+# Process all documents
+python3 ingest.py reindex-all
+
+# Search your documents
+python3 ingest.py search "your query here"
+```
+
+### Option 3: Hybrid Approach
+
+Combine online articles with local documents:
+
+```bash
+# Fetch articles with AI analysis (creates both HTML and JSON)
+python fetch_article.py --non-interactive --output-format=html \
+  https://site1.com/article1 https://site2.com/article2
+
+python fetch_article.py --non-interactive --output-format=json \
+  https://site1.com/article1 https://site2.com/article2
+
+# View the AI analysis in your browser
+open documents/html/*.html
+
+# Add local documents to ./documents folder
+
+# Process everything together
+python3 ingest.py reindex-all
+
+# Your knowledge base now contains both online articles with AI analysis
+# and local documents - all searchable together!
+```
 
 ## 🐛 Troubleshooting
 
@@ -146,6 +228,79 @@ python3 ingest.py reindex-all
 
 # Search your documents
 python3 ingest.py search "your search query"
+```
+
+## 🌐 Article Fetcher
+
+The pipeline includes a powerful article fetcher that can process online articles directly from URLs with AI-powered analysis and multiple output formats.
+
+### Features
+
+- **Clean content extraction** - Uses newspaper3k to extract article content while filtering out ads, navigation, and unrelated elements
+- **AI-powered analysis** - Comprehensive LLM analysis including 600-word summaries, key insights, source reliability assessment, fact-checking, and citation extraction
+- **Multiple output formats** - JSON for data processing or HTML for publishing
+- **Interactive & automated modes** - Step-by-step approval workflow or fully automated processing
+- **Paywall handling** - Manual content input when automatic extraction fails
+- **Duplicate detection** - Checks against existing content to avoid processing duplicates
+- **Copyright-safe HTML export** - Contains only AI analysis, no original content
+
+### Quick Usage
+
+```bash
+# Interactive mode - process single article with step-by-step approval
+python fetch_article.py https://example.com/article
+
+# Non-interactive automation - process multiple URLs to JSON
+python fetch_article.py --non-interactive --output-format=json https://site1.com/article1 https://site2.com/article2
+
+# HTML export for publishing
+python fetch_article.py --non-interactive --output-format=html --output-dir=./knowledge-base https://example.com/article
+
+# Console output for piping and automation
+python fetch_article.py --non-interactive --output-format=html --output-console https://example.com/article
+```
+
+### Interactive Workflow
+
+1. **Content extraction** - Automatically fetches clean article content
+2. **AI analysis** - Generates comprehensive analysis (summary, insights, reliability, fact-checking, citations)  
+3. **Step-by-step approval**:
+   - Review and approve summary (or regenerate)
+   - Review and correct author information
+   - Review and correct publication date
+   - Review and modify tags
+   - Add optional notes
+4. **File generation** - Creates structured JSON or HTML files
+
+### Output Formats
+
+**JSON Format** (for vector database ingestion):
+- Structured metadata with AI analysis in markdown format
+- Compatible with existing pipeline for semantic search
+- Includes original content for full-text indexing
+
+**HTML Format** (for publishing and copyright compliance):
+- Clean, styled HTML with semantic structure
+- Custom meta tags for metadata preservation
+- Only AI analysis content (no original article text)
+- Optimized for semantic search indexing
+
+### Automation Support
+
+- **Exit codes** - 0 (success), 1 (partial failure), 2 (complete failure)
+- **Non-interactive mode** - Skip all prompts for CI/CD integration
+- **Batch processing** - Handle multiple URLs efficiently
+- **newspaper3k priority** - Reliable metadata extraction from HTML structure
+- **Fail-fast approach** - Skip problematic URLs instead of degraded results
+
+### Integration with Pipeline
+
+Articles processed by the fetcher integrate seamlessly with the main pipeline:
+
+```bash
+# Process articles and add to vector database
+python fetch_article.py --non-interactive --output-format=json https://example.com/article
+python3 ingest.py add-update documents/json/2025-01-15-article-title.json
 ```
 
 ## 📖 Usage Examples
@@ -474,7 +629,8 @@ python3 ingest.py reindex-all  # Check logs for performance metrics
 **Dependencies:**
 
 - Core: `requests`, `pydantic`, `click`, `pyyaml`
-- Document processing: `markitdown`, `pypdf`, `html-to-markdown`
+- Document processing: `markitdown`, `pypdf`, `html-to-markdown`, `markdown`
+- Article fetching: `newspaper3k`, `lxml_html_clean`
 - Embeddings: `google-generativeai`, `sentence-transformers`
 - Vector storage: `qdrant-client`
 - Testing: `pytest`, `pytest-mock`

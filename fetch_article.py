@@ -35,6 +35,12 @@ except ImportError:
     print("Error: newspaper3k is not installed. Please run: pip install newspaper3k")
     sys.exit(1)
 
+try:
+    import markdown
+except ImportError:
+    print("Error: markdown is not installed. Please run: pip install markdown")
+    sys.exit(1)
+
 # Local imports
 from src.config import load_config
 from src.llm_providers import create_llm_provider
@@ -488,6 +494,22 @@ CONTENT: {content}
         
         return markdown_content
 
+    def _markdown_to_html(self, markdown_text: str) -> str:
+        """
+        Convert markdown text to HTML using the markdown library.
+        
+        Args:
+            markdown_text: Markdown formatted text
+            
+        Returns:
+            HTML formatted text
+        """
+        if not markdown_text:
+            return ""
+        
+        md = markdown.Markdown()
+        return md.convert(markdown_text)
+
     def create_html_content(self, analysis: Dict[str, Any], article_data: Dict[str, Any]) -> str:
         """
         Create HTML content for copyright-safe export.
@@ -502,6 +524,9 @@ CONTENT: {content}
         publication_date = analysis.get('publication_date') or ''
         source_url = article_data.get('url', '')
         title = analysis.get('title', 'Untitled Article')
+        
+        # Convert summary markdown to HTML
+        summary_html = self._markdown_to_html(analysis.get('summary', 'No summary available'))
         
         # Create insights HTML
         insights_html = ""
@@ -549,7 +574,7 @@ CONTENT: {content}
         
         <h2 class="ai-summary">Summary</h2>
         <div class="ai-summary">
-            <p>{analysis.get('summary', 'No summary available')}</p>
+            {summary_html}
         </div>
         
         <h2 class="ai-insights">Key Insights</h2>
