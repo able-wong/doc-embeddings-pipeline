@@ -45,6 +45,7 @@ except ImportError:
 from src.config import load_config
 from src.llm_providers import create_llm_provider
 from src.utils import clean_filename_for_title
+from src.html_exporter import convert_json_to_html, generate_filename as html_generate_filename
 
 
 class ArticleFetcher:
@@ -494,113 +495,7 @@ CONTENT: {content}
         
         return markdown_content
 
-    def _markdown_to_html(self, markdown_text: str) -> str:
-        """
-        Convert markdown text to HTML using the markdown library.
-        
-        Args:
-            markdown_text: Markdown formatted text
-            
-        Returns:
-            HTML formatted text
-        """
-        if not markdown_text:
-            return ""
-        
-        md = markdown.Markdown()
-        return md.convert(markdown_text)
 
-    def create_html_content(self, analysis: Dict[str, Any], article_data: Dict[str, Any]) -> str:
-        """
-        Create HTML content for copyright-safe export.
-        
-        Returns:
-            Formatted HTML string
-        """
-        # Prepare meta tags
-        author = analysis.get('author') or ''
-        description = analysis.get('summary', '')[:160] + '...' if len(analysis.get('summary', '')) > 160 else analysis.get('summary', '')
-        keywords = ', '.join(analysis.get('tags', []))
-        publication_date = analysis.get('publication_date') or ''
-        source_url = article_data.get('url', '')
-        title = analysis.get('title', 'Untitled Article')
-        
-        # Convert summary markdown to HTML
-        summary_html = self._markdown_to_html(analysis.get('summary', 'No summary available'))
-        
-        # Create insights HTML
-        insights_html = ""
-        if analysis.get('key_insights'):
-            insights_html = "<ul>\n"
-            for insight in analysis['key_insights']:
-                insights_html += f"            <li>{insight}</li>\n"
-            insights_html += "        </ul>"
-        else:
-            insights_html = "<p>No key insights extracted</p>"
-        
-        # Create citations HTML
-        citations_html = ""
-        if analysis.get('citations'):
-            citations_html = "<ul>\n"
-            for citation in analysis['citations']:
-                citations_html += f"            <li>{citation}</li>\n"
-            citations_html += "        </ul>"
-        else:
-            citations_html = "<p>No citations extracted</p>"
-        
-        html_content = f'''<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{title}</title>
-    <meta name="author" content="{author}">
-    <meta name="description" content="{description}">
-    <meta name="keywords" content="{keywords}">
-    <meta name="article:publication_date" content="{publication_date}">
-    <meta name="article:source_url" content="{source_url}">
-    <style>
-        body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; max-width: 800px; margin: 0 auto; padding: 20px; line-height: 1.6; }}
-        h1 {{ color: #333; border-bottom: 2px solid #007acc; padding-bottom: 10px; }}
-        h2 {{ color: #555; margin-top: 30px; }}
-        .ai-summary, .ai-insights, .ai-reliability, .ai-factcheck {{ margin-bottom: 25px; }}
-        ul {{ padding-left: 20px; }}
-        li {{ margin-bottom: 8px; }}
-    </style>
-</head>
-<body>
-    <article>
-        <h1>{title}</h1>
-        
-        <h2 class="ai-summary">Summary</h2>
-        <div class="ai-summary">
-            {summary_html}
-        </div>
-        
-        <h2 class="ai-insights">Key Insights</h2>
-        <div class="ai-insights">
-            {insights_html}
-        </div>
-        
-        <h2 class="ai-reliability">Source Reliability Assessment</h2>
-        <div class="ai-reliability">
-            <p>{analysis.get('source_reliability', 'No reliability assessment available')}</p>
-        </div>
-        
-        <h2 class="ai-factcheck">Fact-Checking Analysis</h2>
-        <div class="ai-factcheck">
-            <p>{analysis.get('fact_checking', 'No fact-checking analysis available')}</p>
-        </div>
-        
-        <h2 class="ai-citations">Citations & References</h2>
-        <div class="ai-citations">
-            {citations_html}
-        </div>
-    </article>
-</body>
-</html>'''
-        
-        return html_content
 
     def generate_filename(self, title: str, publication_date: Optional[str], extension: str = None) -> str:
         """
@@ -609,26 +504,11 @@ CONTENT: {content}
         Returns:
             Filename string
         """
-        # Use publication date or current date
-        if publication_date:
-            try:
-                date_obj = datetime.strptime(publication_date, '%Y-%m-%d')
-                date_str = date_obj.strftime('%Y-%m-%d')
-            except ValueError:
-                date_str = datetime.now().strftime('%Y-%m-%d')
-        else:
-            date_str = datetime.now().strftime('%Y-%m-%d')
-        
-        # Create slug from title
-        slug = re.sub(r'[^\w\s-]', '', title.lower())
-        slug = re.sub(r'[-\s]+', '-', slug).strip('-')
-        slug = slug[:50]  # Limit length
-        
         # Use extension based on output format if not specified
         if extension is None:
             extension = "html" if self.output_format == "html" else "json"
         
-        return f"{date_str}-{slug}.{extension}"
+        return html_generate_filename(title, publication_date, extension)
 
     def save_output_file(self, analysis: Dict[str, Any], article_data: Dict[str, Any]) -> str:
         """
@@ -685,21 +565,28 @@ CONTENT: {content}
         Returns:
             Path to saved file or indication of console output
         """
-        # Create HTML content
-        html_content = self.create_html_content(analysis, article_data)
+        # Create JSON structure to pass to HTML exporter
+        json_data = {
+            "title": clean_filename_for_title(analysis['title']),
+            "author": analysis['author'],
+            "publication_date": analysis['publication_date'] + "T00:00:00" if analysis['publication_date'] else None,
+            "original_text": self.create_structured_markdown(analysis),
+            "source_url": article_data['url'],
+            "notes": analysis.get('notes', ''),
+            "tags": analysis['tags']
+        }
         
         if self.output_console:
-            # Output to console
-            print(html_content)
+            # Output to console using shared exporter
+            convert_json_to_html(json_data, None)
             return "console output"
         else:
             # Generate filename and save to file
             filename = self.generate_filename(analysis['title'], analysis['publication_date'])
             filepath = self.output_folder / filename
             
-            # Save HTML file
-            with open(filepath, 'w', encoding='utf-8') as f:
-                f.write(html_content)
+            # Use shared HTML exporter
+            convert_json_to_html(json_data, str(filepath))
             
             return str(filepath)
 
