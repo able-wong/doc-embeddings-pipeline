@@ -64,40 +64,54 @@ def test_extract_from_txt(document_processor, temp_docs_folder):
     """Test extracting text from .txt file."""
     txt_file = temp_docs_folder / "test.txt"
 
-    content = document_processor._extract_from_txt(txt_file)
+    extracted_content = document_processor.extract_content_from_file(txt_file)
 
-    assert content == "This is a test document with some content."
+    assert extracted_content.content == "This is a test document with some content."
+    assert extracted_content.extraction_method == "direct_read"
 
 
 def test_extract_from_markdown(document_processor, temp_docs_folder):
     """Test extracting text from .md file."""
     md_file = temp_docs_folder / "test.md"
 
-    content = document_processor._extract_from_markdown(md_file)
+    extracted_content = document_processor.extract_content_from_file(md_file)
 
-    assert content == "# Test Markdown\n\nThis is markdown content."
+    assert extracted_content.content == "# Test Markdown\n\nThis is markdown content."
+    assert extracted_content.extraction_method == "markdown_direct"
 
 
-@patch('src.document_processor.MarkItDown')
-def test_extract_from_docx(mock_markitdown, document_processor):
+def test_extract_from_docx(document_processor):
     """Test extracting text from .docx file."""
-    # Mock MarkItDown
-    mock_instance = Mock()
-    mock_instance.convert.return_value.text_content = "Converted docx content"
-    mock_markitdown.return_value = mock_instance
+    # Create a real file path with .docx extension
+    import tempfile
+    from pathlib import Path
+    with tempfile.NamedTemporaryFile(suffix='.docx', delete=False) as f:
+        # Write some dummy content to make it a valid file
+        f.write(b'dummy docx content')
+        test_file = Path(f.name)
 
-    # Create mock file path
-    mock_file = Mock()
-    mock_file.suffix = '.docx'
+    try:
+        # Get the handler and mock its markitdown instance
+        handler = document_processor.handler_registry.get_handler(test_file)
+        
+        # Mock the markitdown convert method
+        mock_result = Mock()
+        mock_result.text_content = "Converted docx content"
+        
+        with patch.object(handler, 'markitdown') as mock_markitdown:
+            mock_markitdown.convert.return_value = mock_result
+            
+            extracted_content = document_processor.extract_content_from_file(test_file)
 
-    with patch.object(document_processor, 'markitdown', mock_instance):
-        content = document_processor._extract_from_docx(mock_file)
+            assert extracted_content.content == "Converted docx content"
+            assert extracted_content.extraction_method in ["markitdown_with_docx_properties", "markitdown_only", "markitdown_fallback"]
+            # MarkItDown convert is called with the string path
+            mock_markitdown.convert.assert_called_once_with(str(test_file))
+    finally:
+        test_file.unlink()
 
-    assert content == "Converted docx content"
-    mock_instance.convert.assert_called_once()
 
-
-@patch('src.document_processor.convert_to_markdown')
+@patch('src.handlers.html_handler.convert_to_markdown')
 def test_extract_from_html(mock_convert, document_processor, temp_docs_folder):
     """Test extracting text from .html file."""
     # Create HTML test file
@@ -108,25 +122,28 @@ def test_extract_from_html(mock_convert, document_processor, temp_docs_folder):
     # Mock the convert_to_markdown function
     mock_convert.return_value = "# Test\n\nContent"
 
-    content = document_processor._extract_from_html(html_file)
+    extracted_content = document_processor.extract_content_from_file(html_file)
 
-    assert content == "# Test\n\nContent"
-    mock_convert.assert_called_once_with(
-        html_content,
-        preprocess_html=True,
-        remove_navigation=True,
-        remove_forms=True,
-        heading_style='atx'
-    )
+    assert extracted_content.content == "# Test\n\nContent"
+    assert extracted_content.extraction_method in ["html_to_markdown_with_meta", "html_to_markdown_latin1"]
+    # The handler calls convert_to_markdown with just the HTML content
+    mock_convert.assert_called_once_with(html_content)
 
 
 def test_create_document_metadata(document_processor, temp_docs_folder):
     """Test creating document metadata."""
     document_processor.config.folder_path = str(temp_docs_folder)
     test_file = temp_docs_folder / "test.txt"
-    content = "Test content"
+    
+    # Create ExtractedContent object like the handlers return
+    from src.document_processor import ExtractedContent
+    extracted_content = ExtractedContent(
+        content="Test content",
+        metadata={},
+        extraction_method="test"
+    )
 
-    metadata = document_processor.create_document_metadata(test_file, content)
+    metadata = document_processor.create_document_metadata(test_file, extracted_content)
 
     assert metadata.source_url == "file:test.txt"  # Now uses source_url with file: protocol
     assert metadata.file_extension == ".txt"
@@ -212,5 +229,5 @@ def test_extract_text_from_file_unsupported_extension(document_processor):
     mock_file = Mock()
     mock_file.suffix = '.xyz'
 
-    with pytest.raises(ValueError, match="Unsupported file extension"):
+    with pytest.raises(ValueError, match="No handler found for extension"):
         document_processor.extract_text_from_file(mock_file)

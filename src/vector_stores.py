@@ -194,7 +194,8 @@ class QdrantVectorStore(VectorStore):
                     "author": chunk.metadata.author,
                     "title": chunk.metadata.title,
                     "publication_date": chunk.metadata.publication_date.isoformat() if chunk.metadata.publication_date else None,
-                    "tags": chunk.metadata.tags
+                    "tags": chunk.metadata.tags,
+                    "notes": chunk.metadata.notes
                 }
 
                 point = PointStruct(

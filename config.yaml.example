@@ -11,7 +11,7 @@
 # ============================================================================
 documents:
   folder_path: "./documents"  # Path to folder containing documents to process
-  supported_extensions: [".txt", ".docx", ".pdf", ".md", ".html"]  # File types to process
+  supported_extensions: [".txt", ".docx", ".pdf", ".md", ".html", ".json"]  # File types to process
   chunk_size: 1000      # Maximum characters per text chunk
   chunk_overlap: 200    # Characters to overlap between chunks (for context continuity)
 

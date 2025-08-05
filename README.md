@@ -10,7 +10,7 @@ This pipeline serves as the **foundation for RAG systems**, handling the critica
 
 **What it does:**
 
-1. **Ingests** documents from multiple formats (.txt, .docx, .pdf, .md, .html)
+1. **Ingests** documents from multiple formats (.txt, .docx, .pdf, .md, .html, .json)
 2. **Processes** them into semantically meaningful chunks
 3. **Generates embeddings** using your choice of providers
 4. **Stores** in vector databases for fast similarity search
@@ -30,6 +30,7 @@ This pipeline serves as the **foundation for RAG systems**, handling the critica
 - Microsoft Word (.docx)
 - PDF documents (.pdf)
 - HTML pages (.html)
+- JSON structured content (.json)
 - Automatic markdown conversion for consistent processing
 
 ### 🗄️ **Flexible Vector Storage**
@@ -319,6 +320,71 @@ curl -X POST "http://localhost:6333/collections/documents/points/search" \
     "with_payload": true
   }'
 ```
+
+## 📊 Qdrant Collection Schema
+
+The pipeline stores document chunks in Qdrant with the following payload structure:
+
+### Payload Schema
+
+```json
+{
+  "chunk_text": "string",           // The actual text chunk content
+  "original_text": "string",        // Full original document text
+  "source_url": "string",           // File path with protocol (file://, https://)
+  "file_extension": "string",       // .txt, .pdf, .docx, etc.
+  "file_size": "number",            // File size in bytes
+  "last_modified": "string",        // ISO timestamp
+  "content_hash": "string",         // Hash of content for deduplication
+  "chunk_index": "number",          // Position of chunk in document
+  
+  // LLM-extracted metadata fields (indexed for fast querying)
+  "author": "string|null",          // Document author
+  "title": "string|null",           // Document title  
+  "publication_date": "string|null", // ISO date string
+  "tags": ["string"],               // Array of tags
+  "notes": "string|null"            // Additional notes or descriptions
+}
+```
+
+### Indexed Fields
+
+The pipeline automatically creates payload indices for optimal query performance:
+
+- **`tags`** - KEYWORD schema (array of strings for categorical filtering)
+- **`author`** - KEYWORD schema (exact matching for author queries)
+- **`title`** - KEYWORD schema (exact matching for document titles)
+- **`publication_date`** - DATETIME schema (temporal range queries)
+
+### Key Features
+
+- **Unique IDs**: Each chunk gets a `chunk_id` based on `content_hash + chunk_index`
+- **Deduplication**: Content changes detected via `content_hash` comparison
+- **RAG-Optimized**: Designed for `with_payload: true` queries in RAG applications
+- **Metadata-Rich**: Combines file system metadata with LLM-extracted semantic metadata
+
+### JSON Document Support
+
+The pipeline supports pre-structured JSON files with the following format:
+
+```json
+{
+  "title": "Document title",
+  "author": "Author name", 
+  "publication_date": "2025-01-01T00:00:00",
+  "original_text": "Markdown content here...",
+  "source_url": "https://example.com/source",
+  "notes": "Additional notes or description",
+  "tags": ["tag1", "tag2", "tag3"]
+}
+```
+
+**Benefits of JSON format:**
+
+- **Pre-extracted metadata** - No LLM processing needed for structured content
+- **High confidence** - Metadata accuracy depends on source extraction quality
+- **Fast processing** - Direct ingestion without content analysis
+- **Flexible source** - Can originate from web scrapers, APIs, or content management systems
 
 ## 🎭 Embedding Model Comparison
 
