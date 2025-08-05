@@ -17,6 +17,76 @@ class HtmlHandler(BaseHandler):
     def supported_extensions(self) -> List[str]:
         return ['.html', '.htm']
     
+    def _extract_ai_analysis_content(self, html_content: str) -> str:
+        """Extract structured AI analysis content from our exported HTML format.
+        
+        Args:
+            html_content: Raw HTML content
+            
+        Returns:
+            Structured markdown content
+        """
+        sections = []
+        
+        # Extract summary
+        summary_match = re.search(r'<div\s+class\s*=\s*["\']ai-summary["\'][^>]*>(.*?)</div>', html_content, re.IGNORECASE | re.DOTALL)
+        if summary_match:
+            summary_html = summary_match.group(1).strip()
+            # Remove HTML tags and clean up
+            summary_text = re.sub(r'<[^>]+>', '', summary_html)
+            summary_text = re.sub(r'\s+', ' ', summary_text).strip()
+            if summary_text:
+                sections.append(f"## Summary\n\n{summary_text}")
+        
+        # Extract key insights
+        insights_match = re.search(r'<div\s+class\s*=\s*["\']ai-insights["\'][^>]*>(.*?)</div>', html_content, re.IGNORECASE | re.DOTALL)
+        if insights_match:
+            insights_html = insights_match.group(1).strip()
+            # Extract list items
+            insights = []
+            li_matches = re.findall(r'<li[^>]*>(.*?)</li>', insights_html, re.IGNORECASE | re.DOTALL)
+            for li in li_matches:
+                insight_text = re.sub(r'<[^>]+>', '', li).strip()
+                if insight_text:
+                    insights.append(f"- {insight_text}")
+            
+            if insights:
+                sections.append(f"## Key Insights\n\n" + '\n'.join(insights))
+        
+        # Extract source reliability
+        reliability_match = re.search(r'<div\s+class\s*=\s*["\']ai-reliability["\'][^>]*>(.*?)</div>', html_content, re.IGNORECASE | re.DOTALL)
+        if reliability_match:
+            reliability_html = reliability_match.group(1).strip()
+            reliability_text = re.sub(r'<[^>]+>', '', reliability_html)
+            reliability_text = re.sub(r'\s+', ' ', reliability_text).strip()
+            if reliability_text:
+                sections.append(f"## Source Reliability Assessment\n\n{reliability_text}")
+        
+        # Extract fact-checking
+        factcheck_match = re.search(r'<div\s+class\s*=\s*["\']ai-factcheck["\'][^>]*>(.*?)</div>', html_content, re.IGNORECASE | re.DOTALL)
+        if factcheck_match:
+            factcheck_html = factcheck_match.group(1).strip()
+            factcheck_text = re.sub(r'<[^>]+>', '', factcheck_html)
+            factcheck_text = re.sub(r'\s+', ' ', factcheck_text).strip()
+            if factcheck_text:
+                sections.append(f"## Fact-Checking Analysis\n\n{factcheck_text}")
+        
+        # Extract citations
+        citations_match = re.search(r'<div\s+class\s*=\s*["\']ai-citations["\'][^>]*>(.*?)</div>', html_content, re.IGNORECASE | re.DOTALL)
+        if citations_match:
+            citations_html = citations_match.group(1).strip()
+            citations = []
+            li_matches = re.findall(r'<li[^>]*>(.*?)</li>', citations_html, re.IGNORECASE | re.DOTALL)
+            for li in li_matches:
+                citation_text = re.sub(r'<[^>]+>', '', li).strip()
+                if citation_text:
+                    citations.append(f"- {citation_text}")
+            
+            if citations:
+                sections.append(f"## Citations & References\n\n" + '\n'.join(citations))
+        
+        return '\n\n'.join(sections)
+    
     def extract_content(self, file_path: Path) -> ExtractedContent:
         """Extract content and metadata from an HTML file.
         
@@ -30,8 +100,15 @@ class HtmlHandler(BaseHandler):
             with open(file_path, 'r', encoding='utf-8') as f:
                 html_content = f.read()
             
-            # Convert HTML to Markdown
-            markdown_content = convert_to_markdown(html_content)
+            # Check if this is our exported HTML format (has AI analysis sections)
+            has_ai_sections = bool(re.search(r'<div\s+class\s*=\s*["\']ai-(summary|insights|reliability|factcheck)', html_content, re.IGNORECASE))
+            
+            if has_ai_sections:
+                # This is our exported HTML format - extract structured AI analysis
+                markdown_content = self._extract_ai_analysis_content(html_content)
+            else:
+                # Regular HTML file - convert to markdown
+                markdown_content = convert_to_markdown(html_content)
             
             # Extract metadata from HTML meta tags and title
             metadata = {}
@@ -70,6 +147,16 @@ class HtmlHandler(BaseHandler):
                                 metadata['tags'] = tags
                         elif name in ['date', 'published', 'publish_date']:
                             metadata['publication_date'] = content
+            
+            # Check for custom article meta tags (from our HTML export)
+            article_meta_tags = re.findall(r'<meta\s+name\s*=\s*["\']article:([^"\']+)["\']\s+content\s*=\s*["\']([^"\']*)["\']', html_content, re.IGNORECASE)
+            for prop, content in article_meta_tags:
+                content = content.strip()
+                if content:
+                    if prop == 'publication_date':
+                        metadata['publication_date'] = content
+                    elif prop == 'source_url':
+                        metadata['source_url'] = content
             
             # Also check for Open Graph and Twitter Card meta tags
             og_meta_tags = re.findall(r'<meta\s+property\s*=\s*["\']og:([^"\']+)["\']\s+content\s*=\s*["\']([^"\']*)["\']', html_content, re.IGNORECASE)
