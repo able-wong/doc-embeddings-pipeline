@@ -54,9 +54,22 @@ class VectorStore(ABC):
         """Test if the vector store is accessible."""
         pass
 
+    @abstractmethod
+    def ensure_payload_indices(self, fields: List[str]) -> bool:
+        """Ensure payload indices exist for specified fields."""
+        pass
+
 
 class QdrantVectorStore(VectorStore):
     """Qdrant vector store implementation supporting both local and cloud instances."""
+    
+    # Schema types for payload indices
+    PAYLOAD_SCHEMA_TYPES = {
+        'tags': None,  # Will be set after import
+        'author': None,
+        'title': None,
+        'publication_date': None,
+    }
 
     def __init__(self, config: VectorDBConfig):
         self.config = config
@@ -64,6 +77,16 @@ class QdrantVectorStore(VectorStore):
 
         try:
             from qdrant_client import QdrantClient
+            from qdrant_client.models import PayloadSchemaType
+            
+            # Initialize schema types after import
+            if QdrantVectorStore.PAYLOAD_SCHEMA_TYPES['tags'] is None:
+                QdrantVectorStore.PAYLOAD_SCHEMA_TYPES.update({
+                    'tags': PayloadSchemaType.KEYWORD,
+                    'author': PayloadSchemaType.KEYWORD,
+                    'title': PayloadSchemaType.KEYWORD,
+                    'publication_date': PayloadSchemaType.DATETIME,
+                })
         except ImportError:
             raise ImportError("qdrant-client library is required. Install with: pip install qdrant-client")
 
@@ -275,6 +298,83 @@ class QdrantVectorStore(VectorStore):
             self.logger.error(f"Error getting collection stats: {e}")
             return {"error": str(e)}
 
+    def create_payload_indices(self, fields: List[str]) -> bool:
+        """Create payload indices for specified fields."""
+        try:
+            from qdrant_client.models import PayloadSchemaType
+            
+            success_count = 0
+            for field in fields:
+                try:
+                    # Determine appropriate schema type based on field
+                    from qdrant_client.models import PayloadSchemaType
+                    schema_type = self.PAYLOAD_SCHEMA_TYPES.get(field, PayloadSchemaType.KEYWORD)
+                    
+                    self.client.create_payload_index(
+                        collection_name=self.config.collection_name,
+                        field_name=field,
+                        field_schema=schema_type
+                    )
+                    self.logger.info(f"Created payload index for field: {field}")
+                    success_count += 1
+                    
+                except Exception as field_error:
+                    # Index might already exist or field might not be indexable
+                    self.logger.warning(f"Could not create index for field {field}: {field_error}")
+                    continue
+            
+            self.logger.info(f"Created {success_count}/{len(fields)} payload indices")
+            return success_count == len(fields)
+            
+        except Exception as e:
+            self.logger.error(f"Error creating payload indices: {e}")
+            return False
+
+    def check_payload_indices(self, fields: List[str]) -> Dict[str, bool]:
+        """Check which payload indices exist for specified fields."""
+        try:
+            # Get collection info to check existing indices
+            info = self.client.get_collection(self.config.collection_name)
+            
+            # Extract indexed fields from collection info
+            indexed_fields = set()
+            if hasattr(info, 'config') and hasattr(info.config, 'params'):
+                payload_indices = getattr(info.config.params, 'payload_indices', {})
+                if payload_indices:
+                    indexed_fields = set(payload_indices.keys())
+            
+            # Return status for each requested field
+            result = {}
+            for field in fields:
+                result[field] = field in indexed_fields
+                
+            return result
+            
+        except Exception as e:
+            self.logger.error(f"Error checking payload indices: {e}")
+            return {field: False for field in fields}
+
+    def ensure_payload_indices(self, fields: List[str]) -> bool:
+        """Ensure payload indices exist for specified fields, creating them if needed."""
+        try:
+            # Check which indices already exist
+            existing_indices = self.check_payload_indices(fields)
+            
+            # Find fields that need indices
+            missing_fields = [field for field, exists in existing_indices.items() if not exists]
+            
+            if not missing_fields:
+                self.logger.info(f"All payload indices already exist: {fields}")
+                return True
+            
+            # Create missing indices
+            self.logger.info(f"Creating missing payload indices: {missing_fields}")
+            return self.create_payload_indices(missing_fields)
+            
+        except Exception as e:
+            self.logger.error(f"Error ensuring payload indices: {e}")
+            return False
+
     def test_connection(self) -> bool:
         """Test if Qdrant is accessible."""
         try:
@@ -323,6 +423,9 @@ class FirestoreVectorStore(VectorStore):
         raise NotImplementedError("Firestore vector store not yet implemented")
 
     def test_connection(self) -> bool:
+        raise NotImplementedError("Firestore vector store not yet implemented")
+
+    def ensure_payload_indices(self, fields: List[str]) -> bool:
         raise NotImplementedError("Firestore vector store not yet implemented")
 
 

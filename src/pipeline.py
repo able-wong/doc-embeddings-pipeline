@@ -173,6 +173,14 @@ class IngestionPipeline:
                 self.logger.error("Failed to create collection")
                 return False
 
+            # Ensure payload indices exist for metadata fields
+            required_indices = ['tags', 'author', 'publication_date', 'title']
+            self.logger.info("Ensuring payload indices exist for metadata fields...")
+            if not self.vector_store.ensure_payload_indices(required_indices):
+                self.logger.warning("Some payload indices could not be created, but continuing with reindexing")
+            else:
+                self.logger.info("✓ Payload indices are ready")
+
             # Get all files
             files = self.document_processor.get_supported_files()
             self.logger.info(f"Found {len(files)} supported files")
