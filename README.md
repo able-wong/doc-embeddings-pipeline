@@ -108,8 +108,7 @@ python fetch_article.py --non-interactive --output-format=html \
   https://example.com/article2 \
   https://example.com/article3
 
-# View the processed articles (open in browser to see AI analysis)
-open documents/html/*.html
+# View the processed articles in your browser (e.g., by opening the files in documents/html/)
 
 # Also create JSON format for vector database ingestion
 python fetch_article.py --non-interactive --output-format=json \

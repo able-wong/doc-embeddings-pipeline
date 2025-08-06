@@ -77,8 +77,8 @@ class ArticleFetcher:
         if not output_console:
             self.output_folder.mkdir(parents=True, exist_ok=True)
         
-        # Legacy support
-        self.json_folder = self.output_folder
+        # The folder for duplicate checking should always be the JSON document store
+        self.json_folder = Path("documents/json")
         
         # Setup logging
         logging.basicConfig(level=getattr(logging, self.config.logging.level), format='%(levelname)s - %(message)s')

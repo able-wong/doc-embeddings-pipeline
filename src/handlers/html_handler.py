@@ -1,13 +1,91 @@
 """HTML document handler."""
 
 from pathlib import Path
-from typing import List
+from typing import List, Dict, Any
 import re
+from html.parser import HTMLParser
+import html
 
 from html_to_markdown import convert_to_markdown
 
 from .base_handler import BaseHandler
 from ..document_processor import ExtractedContent
+
+
+class MetadataExtractor(HTMLParser):
+    """HTML parser to extract metadata from HTML documents."""
+    
+    def __init__(self):
+        super().__init__()
+        self.metadata = {}
+        self.in_title = False
+        self.title_content = []
+    
+    def handle_starttag(self, tag, attrs):
+        """Handle start tags to extract metadata."""
+        if tag == 'title':
+            self.in_title = True
+            self.title_content = []
+        elif tag == 'meta':
+            # Convert attributes to dict
+            attr_dict = dict(attrs)
+            content = attr_dict.get('content', '').strip()
+            
+            if not content:
+                return
+            
+            # Extract standard meta tags (name attribute)
+            name = attr_dict.get('name', '').lower()
+            if name:
+                if name in ['author', 'creator']:
+                    self.metadata['author'] = content
+                elif name in ['description', 'summary']:
+                    self.metadata['notes'] = content
+                elif name in ['keywords', 'tags']:
+                    # Split keywords by common separators
+                    keywords = content.replace(',', ';').replace(' ', ';')
+                    tags = [tag.strip() for tag in keywords.split(';') if tag.strip()]
+                    if tags:
+                        self.metadata['tags'] = tags
+                elif name in ['date', 'published', 'publish_date']:
+                    self.metadata['publication_date'] = content
+                elif name.startswith('article:'):
+                    # Handle custom article meta tags (from our HTML export)
+                    prop = name[8:]  # Remove 'article:' prefix
+                    if prop == 'publication_date':
+                        self.metadata['publication_date'] = content
+                    elif prop == 'source_url':
+                        self.metadata['source_url'] = content
+            
+            # Extract Open Graph and Twitter Card meta tags (property attribute)
+            property_name = attr_dict.get('property', '').lower()
+            if property_name:
+                if property_name == 'og:title' and 'title' not in self.metadata:
+                    self.metadata['title'] = content
+                elif property_name == 'og:description' and 'notes' not in self.metadata:
+                    self.metadata['notes'] = content
+                elif property_name == 'article:author' and 'author' not in self.metadata:
+                    self.metadata['author'] = content
+                elif property_name == 'article:published_time' and 'publication_date' not in self.metadata:
+                    self.metadata['publication_date'] = content
+    
+    def handle_data(self, data):
+        """Handle text content."""
+        if self.in_title:
+            self.title_content.append(data)
+    
+    def handle_endtag(self, tag):
+        """Handle end tags."""
+        if tag == 'title' and self.in_title:
+            title = ''.join(self.title_content).strip()
+            title = re.sub(r'\s+', ' ', title)  # Clean up whitespace
+            if title:
+                self.metadata['title'] = html.unescape(title)  # Decode HTML entities
+            self.in_title = False
+    
+    def get_metadata(self) -> Dict[str, Any]:
+        """Get extracted metadata."""
+        return self.metadata
 
 
 class HtmlHandler(BaseHandler):
@@ -110,63 +188,15 @@ class HtmlHandler(BaseHandler):
                 # Regular HTML file - convert to markdown
                 markdown_content = convert_to_markdown(html_content)
             
-            # Extract metadata from HTML meta tags and title
-            metadata = {}
+            # Extract metadata using robust HTML parser
+            parser = MetadataExtractor()
+            try:
+                parser.feed(html_content)
+                metadata = parser.get_metadata()
+            except Exception as e:
+                # Fallback to empty metadata if parsing fails
+                metadata = {}
             
-            # Extract title
-            title_match = re.search(r'<title[^>]*>(.*?)</title>', html_content, re.IGNORECASE | re.DOTALL)
-            if title_match:
-                title = title_match.group(1).strip()
-                # Clean up title (remove extra whitespace, decode HTML entities)
-                title = re.sub(r'\s+', ' ', title)
-                if title:
-                    metadata['title'] = title
-            
-            # Extract meta tags
-            meta_tags = re.findall(r'<meta\s+([^>]+)>', html_content, re.IGNORECASE)
-            
-            for meta_attrs in meta_tags:
-                # Parse meta tag attributes
-                name_match = re.search(r'name\s*=\s*["\']([^"\']+)["\']', meta_attrs, re.IGNORECASE)
-                content_match = re.search(r'content\s*=\s*["\']([^"\']*)["\']', meta_attrs, re.IGNORECASE)
-                
-                if name_match and content_match:
-                    name = name_match.group(1).lower()
-                    content = content_match.group(1).strip()
-                    
-                    if content:  # Only add non-empty content
-                        if name in ['author', 'creator']:
-                            metadata['author'] = content
-                        elif name in ['description', 'summary']:
-                            metadata['notes'] = content
-                        elif name in ['keywords', 'tags']:
-                            # Split keywords by common separators
-                            keywords = content.replace(',', ';').replace(' ', ';')
-                            tags = [tag.strip() for tag in keywords.split(';') if tag.strip()]
-                            if tags:
-                                metadata['tags'] = tags
-                        elif name in ['date', 'published', 'publish_date']:
-                            metadata['publication_date'] = content
-            
-            # Check for custom article meta tags (from our HTML export)
-            article_meta_tags = re.findall(r'<meta\s+name\s*=\s*["\']article:([^"\']+)["\']\s+content\s*=\s*["\']([^"\']*)["\']', html_content, re.IGNORECASE)
-            for prop, content in article_meta_tags:
-                content = content.strip()
-                if content:
-                    if prop == 'publication_date':
-                        metadata['publication_date'] = content
-                    elif prop == 'source_url':
-                        metadata['source_url'] = content
-            
-            # Also check for Open Graph and Twitter Card meta tags
-            og_meta_tags = re.findall(r'<meta\s+property\s*=\s*["\']og:([^"\']+)["\']\s+content\s*=\s*["\']([^"\']*)["\']', html_content, re.IGNORECASE)
-            for prop, content in og_meta_tags:
-                content = content.strip()
-                if content:
-                    if prop == 'title' and not metadata.get('title'):
-                        metadata['title'] = content
-                    elif prop == 'description' and not metadata.get('notes'):
-                        metadata['notes'] = content
             
             self.logger.debug(f"Extracted HTML metadata from {file_path}: {metadata}")
             
