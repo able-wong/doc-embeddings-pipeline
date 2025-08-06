@@ -1,0 +1,6 @@
+This is a sample text file for testing.
+
+It contains multiple paragraphs with different content.
+This helps test the text chunking functionality.
+
+The content includes various formatting like line breaks and spacing to ensure proper text extraction.

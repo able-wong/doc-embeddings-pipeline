@@ -1,0 +1,6 @@
+{
+  "title": "Invalid JSON Test",
+  "missing_original_text": "This should cause an error",
+  "tags": "this should be an array, not string"
+  // This comment makes it invalid JSON
+}

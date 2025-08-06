@@ -10,7 +10,7 @@ This pipeline serves as the **foundation for RAG systems**, handling the critica
 
 **What it does:**
 
-1. **Ingests** documents from multiple formats (.txt, .docx, .pdf, .md, .html)
+1. **Ingests** documents from multiple formats (.txt, .docx, .pdf, .md, .html, .json)
 2. **Processes** them into semantically meaningful chunks
 3. **Generates embeddings** using your choice of providers
 4. **Stores** in vector databases for fast similarity search
@@ -30,6 +30,8 @@ This pipeline serves as the **foundation for RAG systems**, handling the critica
 - Microsoft Word (.docx)
 - PDF documents (.pdf)
 - HTML pages (.html)
+- JSON structured content (.json)
+- **Article fetcher** - Direct URL processing with AI analysis
 - Automatic markdown conversion for consistent processing
 
 ### 🗄️ **Flexible Vector Storage**
@@ -81,6 +83,86 @@ graph TB
 ```
 
 ## 🚀 Quick Start
+
+### Option 1: Build Knowledge Base from Online Articles (Fastest)
+
+Perfect for quickly building a knowledge base from online content:
+
+```bash
+# Clone and setup
+git clone https://github.com/able-wong/doc-embeddings-pipeline.git
+cd doc-embeddings-pipeline
+python3 -m venv venv && source venv/bin/activate
+pip install -r requirements.txt
+
+# Quick configuration - use Sentence Transformers (no external dependencies)
+cp config.yaml.example config.yaml
+# Edit config.yaml: set embedding.provider: "sentence_transformers"
+
+# Start local Qdrant (one-time setup)
+docker run -d --name qdrant -p 6333:6333 -v $(pwd)/qdrant_storage:/qdrant/storage qdrant/qdrant
+
+# Build your knowledge base from articles (creates viewable HTML files)
+python fetch_article.py --non-interactive --output-format=html \
+  https://example.com/article1 \
+  https://example.com/article2 \
+  https://example.com/article3
+
+# View the processed articles in your browser (e.g., by opening the files in documents/html/)
+
+# Also create JSON format for vector database ingestion
+python fetch_article.py --non-interactive --output-format=json \
+  https://example.com/article1 \
+  https://example.com/article2 \
+  https://example.com/article3
+
+# Ingest into vector database
+python3 ingest.py reindex-all
+
+# Search your knowledge base
+python3 ingest.py search "your query here"
+```
+
+### Option 2: Process Local Documents
+
+For existing document collections:
+
+```bash
+# Same setup as above, then:
+
+# Add your documents to ./documents folder
+# Supported: .txt, .docx, .pdf, .md, .html, .json
+
+# Process all documents
+python3 ingest.py reindex-all
+
+# Search your documents
+python3 ingest.py search "your query here"
+```
+
+### Option 3: Hybrid Approach
+
+Combine online articles with local documents:
+
+```bash
+# Fetch articles with AI analysis (creates both HTML and JSON)
+python fetch_article.py --non-interactive --output-format=html \
+  https://site1.com/article1 https://site2.com/article2
+
+python fetch_article.py --non-interactive --output-format=json \
+  https://site1.com/article1 https://site2.com/article2
+
+# View the AI analysis in your browser
+open documents/html/*.html
+
+# Add local documents to ./documents folder
+
+# Process everything together
+python3 ingest.py reindex-all
+
+# Your knowledge base now contains both online articles with AI analysis
+# and local documents - all searchable together!
+```
 
 ## 🐛 Troubleshooting
 
@@ -145,6 +227,79 @@ python3 ingest.py reindex-all
 
 # Search your documents
 python3 ingest.py search "your search query"
+```
+
+## 🌐 Article Fetcher
+
+The pipeline includes a powerful article fetcher that can process online articles directly from URLs with AI-powered analysis and multiple output formats.
+
+### Features
+
+- **Clean content extraction** - Uses newspaper3k to extract article content while filtering out ads, navigation, and unrelated elements
+- **AI-powered analysis** - Comprehensive LLM analysis including 600-word summaries, key insights, source reliability assessment, fact-checking, and citation extraction
+- **Multiple output formats** - JSON for data processing or HTML for publishing
+- **Interactive & automated modes** - Step-by-step approval workflow or fully automated processing
+- **Paywall handling** - Manual content input when automatic extraction fails
+- **Duplicate detection** - Checks against existing content to avoid processing duplicates
+- **Copyright-safe HTML export** - Contains only AI analysis, no original content
+
+### Quick Usage
+
+```bash
+# Interactive mode - process single article with step-by-step approval
+python fetch_article.py https://example.com/article
+
+# Non-interactive automation - process multiple URLs to JSON
+python fetch_article.py --non-interactive --output-format=json https://site1.com/article1 https://site2.com/article2
+
+# HTML export for publishing
+python fetch_article.py --non-interactive --output-format=html --output-dir=./knowledge-base https://example.com/article
+
+# Console output for piping and automation
+python fetch_article.py --non-interactive --output-format=html --output-console https://example.com/article
+```
+
+### Interactive Workflow
+
+1. **Content extraction** - Automatically fetches clean article content
+2. **AI analysis** - Generates comprehensive analysis (summary, insights, reliability, fact-checking, citations)  
+3. **Step-by-step approval**:
+   - Review and approve summary (or regenerate)
+   - Review and correct author information
+   - Review and correct publication date
+   - Review and modify tags
+   - Add optional notes
+4. **File generation** - Creates structured JSON or HTML files
+
+### Output Formats
+
+**JSON Format** (for vector database ingestion):
+- Structured metadata with AI analysis in markdown format
+- Compatible with existing pipeline for semantic search
+- Includes original content for full-text indexing
+
+**HTML Format** (for publishing and copyright compliance):
+- Clean, styled HTML with semantic structure
+- Custom meta tags for metadata preservation
+- Only AI analysis content (no original article text)
+- Optimized for semantic search indexing
+
+### Automation Support
+
+- **Exit codes** - 0 (success), 1 (partial failure), 2 (complete failure)
+- **Non-interactive mode** - Skip all prompts for CI/CD integration
+- **Batch processing** - Handle multiple URLs efficiently
+- **newspaper3k priority** - Reliable metadata extraction from HTML structure
+- **Fail-fast approach** - Skip problematic URLs instead of degraded results
+
+### Integration with Pipeline
+
+Articles processed by the fetcher integrate seamlessly with the main pipeline:
+
+```bash
+# Process articles and add to vector database
+python fetch_article.py --non-interactive --output-format=json https://example.com/article
+python3 ingest.py add-update documents/json/2025-01-15-article-title.json
 ```
 
 ## 📖 Usage Examples
@@ -320,6 +475,71 @@ curl -X POST "http://localhost:6333/collections/documents/points/search" \
   }'
 ```
 
+## 📊 Qdrant Collection Schema
+
+The pipeline stores document chunks in Qdrant with the following payload structure:
+
+### Payload Schema
+
+```json
+{
+  "chunk_text": "string",           // The actual text chunk content
+  "original_text": "string",        // Full original document text
+  "source_url": "string",           // File path with protocol (file://, https://)
+  "file_extension": "string",       // .txt, .pdf, .docx, etc.
+  "file_size": "number",            // File size in bytes
+  "last_modified": "string",        // ISO timestamp
+  "content_hash": "string",         // Hash of content for deduplication
+  "chunk_index": "number",          // Position of chunk in document
+  
+  // LLM-extracted metadata fields (indexed for fast querying)
+  "author": "string|null",          // Document author
+  "title": "string|null",           // Document title  
+  "publication_date": "string|null", // ISO date string
+  "tags": ["string"],               // Array of tags
+  "notes": "string|null"            // Additional notes or descriptions
+}
+```
+
+### Indexed Fields
+
+The pipeline automatically creates payload indices for optimal query performance:
+
+- **`tags`** - KEYWORD schema (array of strings for categorical filtering)
+- **`author`** - KEYWORD schema (exact matching for author queries)
+- **`title`** - KEYWORD schema (exact matching for document titles)
+- **`publication_date`** - DATETIME schema (temporal range queries)
+
+### Key Features
+
+- **Unique IDs**: Each chunk gets a `chunk_id` based on `content_hash + chunk_index`
+- **Deduplication**: Content changes detected via `content_hash` comparison
+- **RAG-Optimized**: Designed for `with_payload: true` queries in RAG applications
+- **Metadata-Rich**: Combines file system metadata with LLM-extracted semantic metadata
+
+### JSON Document Support
+
+The pipeline supports pre-structured JSON files with the following format:
+
+```json
+{
+  "title": "Document title",
+  "author": "Author name", 
+  "publication_date": "2025-01-01T00:00:00",
+  "original_text": "Markdown content here...",
+  "source_url": "https://example.com/source",
+  "notes": "Additional notes or description",
+  "tags": ["tag1", "tag2", "tag3"]
+}
+```
+
+**Benefits of JSON format:**
+
+- **Pre-extracted metadata** - No LLM processing needed for structured content
+- **High confidence** - Metadata accuracy depends on source extraction quality
+- **Fast processing** - Direct ingestion without content analysis
+- **Flexible source** - Can originate from web scrapers, APIs, or content management systems
+
 ## 🎭 Embedding Model Comparison
 
 | Provider | Model | Dimensions | Size | Best For |
@@ -408,7 +628,8 @@ python3 ingest.py reindex-all  # Check logs for performance metrics
 **Dependencies:**
 
 - Core: `requests`, `pydantic`, `click`, `pyyaml`
-- Document processing: `markitdown`, `pypdf`, `html-to-markdown`
+- Document processing: `markitdown`, `pypdf`, `html-to-markdown`, `markdown`
+- Article fetching: `newspaper3k`, `lxml_html_clean`
 - Embeddings: `google-generativeai`, `sentence-transformers`
 - Vector storage: `qdrant-client`
 - Testing: `pytest`, `pytest-mock`

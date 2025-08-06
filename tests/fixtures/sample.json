@@ -1,0 +1,9 @@
+{
+  "title": "Test JSON Document",
+  "author": "Test JSON Author",
+  "publication_date": "2025-01-01T10:00:00",
+  "original_text": "# Test JSON Document\n\nThis is a **test JSON document** for testing the JSON handler.\n\n## Content\n\nThe document contains:\n- Pre-extracted metadata\n- Markdown content in original_text field\n- Structured data format\n\n### Testing\n\nThis tests the JSON handler's ability to:\n1. Parse JSON structure\n2. Extract metadata fields\n3. Return markdown content\n4. Handle various data types",
+  "source_url": "https://example.com/test-document",
+  "notes": "This is a test document created for unit testing the JSON handler functionality.",
+  "tags": ["test", "json", "handler", "unit-test"]
+}
