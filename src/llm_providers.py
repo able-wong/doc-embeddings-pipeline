@@ -343,32 +343,14 @@ class OllamaLLMProvider(LLMProvider):
     
     def generate_text_content(self, prompt: str, **kwargs) -> str:
         """Generate plain text response from Ollama."""
-        url = f"{self.config.base_url}/api/generate"
-        payload = {
-            "model": self.config.model,
-            "prompt": prompt,
-            "stream": False
-        }
-        
-        # Apply any additional kwargs
-        payload.update(kwargs)
-        
         for attempt in range(self.config.max_retries):
             try:
-                response = requests.post(
-                    url,
-                    json=payload,
-                    timeout=self.config.timeout
-                )
-                response.raise_for_status()
-                
-                result = response.json()
-                response_text = result.get("response", "")
+                response_text = self._make_llm_request(prompt, for_json=False, **kwargs)
                 
                 if not response_text:
                     raise ValueError("No response from Ollama")
                 
-                return response_text.strip()
+                return response_text
                 
             except Exception as e:
                 self.logger.warning(f"Ollama text generation attempt {attempt + 1} failed: {e}")
@@ -587,25 +569,9 @@ class GeminiLLMProvider(LLMProvider):
     
     def generate_text_content(self, prompt: str, **kwargs) -> str:
         """Generate plain text response from Gemini."""
-        # Set default generation config
-        generation_config = {
-            "temperature": 0.3,
-            "max_output_tokens": 2000,
-        }
-        
-        # Update with any provided kwargs
-        if 'generation_config' in kwargs:
-            generation_config.update(kwargs.pop('generation_config'))
-        
         for attempt in range(self.config.max_retries):
             try:
-                response = self.model.generate_content(
-                    prompt,
-                    generation_config=generation_config,
-                    **kwargs
-                )
-                
-                response_text = response.text.strip()
+                response_text = self._make_llm_request(prompt, for_json=False, **kwargs)
                 
                 if not response_text:
                     raise ValueError("No response from Gemini")

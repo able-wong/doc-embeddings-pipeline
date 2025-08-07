@@ -236,28 +236,54 @@ The pipeline includes a powerful article fetcher that can process online article
 ### Features
 
 - **Clean content extraction** - Uses newspaper3k to extract article content while filtering out ads, navigation, and unrelated elements
+- **Granular content control** - Choose between clean article only, summary/insights only, analysis sections only, or comprehensive output
 - **AI-powered analysis** - Comprehensive LLM analysis including 600-word summaries, key insights, source reliability assessment, fact-checking, and citation extraction
 - **Multiple output formats** - JSON for data processing or HTML for publishing
 - **Interactive & automated modes** - Step-by-step approval workflow or fully automated processing
 - **Paywall handling** - Manual content input when automatic extraction fails
 - **Duplicate detection** - Checks against existing content to avoid processing duplicates
-- **Copyright-safe HTML export** - Contains only AI analysis, no original content
+- **Copyright-safe options** - Summary and analysis modes exclude original content for copyright compliance
 
 ### Quick Usage
 
 ```bash
-# Interactive mode - process single article with step-by-step approval
+# Clean article content only (default behavior)
 python fetch_article.py https://example.com/article
 
-# Non-interactive automation - process multiple URLs to JSON
-python fetch_article.py --non-interactive --output-format=json https://site1.com/article1 https://site2.com/article2
+# Summary and key insights only (no original article)
+python fetch_article.py --summary https://example.com/article
 
-# HTML export for publishing
-python fetch_article.py --non-interactive --output-format=html --output-dir=./knowledge-base https://example.com/article
+# Clean article + comprehensive analysis (reliability, fact-checking, citations)
+python fetch_article.py --analysis https://example.com/article
 
-# Console output for piping and automation
-python fetch_article.py --non-interactive --output-format=html --output-console https://example.com/article
+# Summary + analysis sections only (no original article)
+python fetch_article.py --summary --analysis https://example.com/article
+
+# Non-interactive automation with content selection
+python fetch_article.py --non-interactive --summary --output-format=json https://site1.com/article1
+
+# HTML export for publishing with analysis
+python fetch_article.py --non-interactive --analysis --output-format=html --output-dir=./knowledge-base https://example.com/article
+
+# Console output for piping 
+python fetch_article.py --non-interactive --summary --analysis --output-console https://example.com/article
 ```
+
+### Content Selection Logic
+
+The article fetcher provides granular control over what content is included in the output:
+
+| Flags | Output Content | Use Case |
+|-------|---------------|----------|
+| None | Clean article content only | Original article with ads/navigation removed |
+| `--summary` | Summary + Key insights only | Article highlights without original content |
+| `--analysis` | Clean article + Analysis sections | Full article with credibility assessment |
+| `--summary --analysis` | Summary + Insights + Analysis only | Complete AI analysis without original content |
+
+**Analysis sections include:**
+- Source reliability assessment
+- Fact-checking analysis  
+- Citations and references
 
 ### Interactive Workflow
 

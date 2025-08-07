@@ -1,8 +1,10 @@
 import logging
 import os
 import json
+import time
+from datetime import datetime
 from pathlib import Path
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 from .config import Config
 from .document_processor import DocumentProcessor
@@ -112,21 +114,33 @@ class IngestionPipeline:
             embedding_dim = self.embedding_provider.get_embedding_dimension()
             return self.vector_store.create_collection(embedding_dim)
 
+    def _find_file_by_name(self, files: List[Path], filename: str, base_folder: Path) -> Optional[Path]:
+        """
+        Find a file from a list by matching filename, relative path, or full path.
+        
+        Args:
+            files: List of Path objects to search through
+            filename: Target filename/path to match
+            base_folder: Base folder for computing relative paths
+            
+        Returns:
+            Matching Path object or None if not found
+        """
+        for file_path in files:
+            relative_path = str(file_path.relative_to(base_folder))
+            # Match by filename, relative path, or full path
+            if (file_path.name == filename or 
+                relative_path == filename or 
+                str(file_path) == filename):
+                return file_path
+        return None
+
     def add_or_update_document(self, filename: str) -> bool:
         """Add or update a single document by filename."""
         try:
             # Find the file
             files = self.document_processor.get_supported_files()
-            target_file = None
-
-            for file_path in files:
-                relative_path = str(file_path.relative_to(self.config.documents.folder_path))
-                # Match by filename, relative path, or full path
-                if (file_path.name == filename or 
-                    relative_path == filename or 
-                    str(file_path) == filename):
-                    target_file = file_path
-                    break
+            target_file = self._find_file_by_name(files, filename, self.config.documents.folder_path)
 
             if not target_file:
                 self.logger.error(f"File not found: {filename}")
@@ -466,8 +480,6 @@ class IngestionPipeline:
                     errors += 1
 
             # Update last run timestamp
-            import time
-            from datetime import datetime
             current_time = time.time()
             try:
                 with open(LAST_RUN_FILE, 'w') as f:
