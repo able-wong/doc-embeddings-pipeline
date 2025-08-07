@@ -231,6 +231,38 @@ def stats(ctx):
 
 @cli.command()
 @click.pass_context
+def process_new(ctx):
+    """Process only new or modified documents since the last incremental run."""
+    pipeline = ctx.obj['pipeline']
+
+    click.echo("Starting incremental processing...")
+    click.echo("-" * 40)
+
+    result = pipeline.process_new_documents()
+
+    if result['status'] == 'needs_reindex':
+        click.echo("⚠ Collection health check failed", err=True)
+        click.echo(f"Message: {result['message']}")
+        click.echo("Please run 'reindex_all' command first")
+        sys.exit(1)
+    elif result['status'] == 'error':
+        click.echo("✗ Incremental processing failed", err=True)
+        click.echo(f"Error: {result['message']}")
+        sys.exit(1)
+    else:
+        click.echo("✓ Incremental processing completed")
+        click.echo(f"Total files in directory: {result.get('total_files', 0)}")
+        click.echo(f"Files needing processing: {result.get('candidates', 0)}")
+        click.echo(f"Files skipped (no changes): {result.get('skipped', 0)}")
+        click.echo(f"Successfully processed: {result['processed']}")
+        click.echo(f"Errors: {result['errors']}")
+
+        if result['errors'] > 0:
+            sys.exit(1)
+
+
+@cli.command()
+@click.pass_context
 def test_connections(ctx):
     """Test connections to embedding provider and vector database."""
     pipeline = ctx.obj['pipeline']

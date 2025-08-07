@@ -194,6 +194,13 @@ def parse_markdown_to_html_sections(markdown_content: str) -> str:
         if section_html:
             sections.append(section_html)
     
+    # If no sections were found but we have content, treat as plain article content
+    if not sections and current_content:
+        # Convert plain content to HTML
+        import markdown
+        plain_html = markdown.markdown('\n'.join(current_content))
+        return f'<div class="article-content">\n{plain_html}\n</div>'
+    
     return '\n        \n'.join(sections) if sections else '<p>No structured content available</p>'
 
 
