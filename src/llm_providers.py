@@ -5,6 +5,7 @@ import logging
 import json
 import time
 import os
+import re
 from .config import LLMConfig
 from .utils import extract_filename_from_source_url, clean_filename_for_title, extract_date_from_filename
 from .content_shortener import ContentShortener
@@ -23,6 +24,56 @@ class LLMProvider(ABC):
     def test_connection(self) -> bool:
         """Test if the LLM provider is accessible."""
         pass
+    
+    @abstractmethod
+    def generate_text_content(self, prompt: str, **kwargs) -> str:
+        """Generate plain text response from LLM."""
+        pass
+    
+    def generate_json_content(self, prompt: str, **kwargs) -> Dict[str, Any]:
+        """Generate and parse JSON response from LLM with retry logic and error handling."""
+        provider_name = self.__class__.__name__.replace('LLMProvider', '')
+        
+        for attempt in range(self.config.max_retries):
+            try:
+                # Use provider-specific request method
+                response_text = self._make_llm_request(prompt, for_json=True, **kwargs)
+                
+                if not response_text:
+                    raise ValueError(f"No response from {provider_name}")
+                
+                # Use centralized JSON parsing
+                return self.parse_json(response_text)
+                
+            except json.JSONDecodeError as e:
+                self.logger.warning(f"{provider_name} JSON parsing attempt {attempt + 1} failed: {e}")
+                if attempt < self.config.max_retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                else:
+                    self.logger.error(f"{provider_name} JSON generation failed after {self.config.max_retries} attempts: {e}")
+                    raise
+            except Exception as e:
+                self.logger.warning(f"{provider_name} JSON generation attempt {attempt + 1} failed: {e}")
+                if attempt < self.config.max_retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                else:
+                    self.logger.error(f"{provider_name} JSON generation failed after {self.config.max_retries} attempts: {e}")
+                    raise
+    
+    @abstractmethod
+    def _make_llm_request(self, prompt: str, for_json: bool = False, **kwargs) -> str:
+        """
+        Make provider-specific LLM request and return raw response text.
+        
+        Args:
+            prompt: The prompt to send to the LLM
+            for_json: Whether this request expects JSON response (for provider-specific optimizations)
+            **kwargs: Provider-specific parameters
+            
+        Returns:
+            Raw response text from the LLM
+        """
+        pass
 
     def _get_fallback_metadata(self, filename: str, source_url: str = None) -> Dict[str, Any]:
         """Get fallback metadata when LLM extraction fails. Uses extract_author_from_source_url for better fallback data."""
@@ -33,6 +84,52 @@ class LLMProvider(ABC):
             "publication_date": extract_date_from_filename(filename),
             "tags": []
         }
+    
+    def parse_json(self, response_text: str) -> Dict[str, Any]:
+        """
+        Parse JSON response from LLM, handling markdown code blocks and cleaning up common issues.
+        
+        Args:
+            response_text: Raw response text from LLM
+            
+        Returns:
+            Parsed JSON dictionary
+            
+        Raises:
+            json.JSONDecodeError: If JSON parsing fails after all cleanup attempts
+        """
+        if not response_text or not response_text.strip():
+            raise json.JSONDecodeError("Empty response text", response_text, 0)
+        
+        response_text = response_text.strip()
+        
+        # Step 1: Try to extract JSON from markdown code block
+        code_block_pattern = r"```(?:json)?\s*([\s\S]*?)\s*```"
+        match = re.search(code_block_pattern, response_text, re.IGNORECASE | re.MULTILINE | re.DOTALL)
+        if match:
+            json_str = match.group(1).strip()
+            self.logger.debug(f"Extracted JSON from code block: {len(json_str)} chars")
+        else:
+            json_str = response_text
+            self.logger.debug(f"No code block found, using raw response: {len(json_str)} chars")
+        
+        if not json_str:
+            raise json.JSONDecodeError("No JSON content found after code block extraction", response_text, 0)
+        
+        # Step 2: Handle cases where response starts with extraneous quotes
+        if json_str.startswith('"') and not json_str.startswith('{"'):
+            json_start = json_str.find('{')
+            if json_start != -1:
+                json_str = json_str[json_start:]
+        
+        # Step 3: Try to parse the cleaned JSON
+        try:
+            return json.loads(json_str)
+        except json.JSONDecodeError as e:
+            # If parsing still fails, provide helpful error info
+            self.logger.error(f"JSON parsing failed after cleanup. Original length: {len(response_text)}, Cleaned length: {len(json_str)}")
+            self.logger.error(f"First 200 chars of cleaned JSON: {json_str[:200]}")
+            raise e
 
 
 class OllamaLLMProvider(LLMProvider):
@@ -243,6 +340,71 @@ class OllamaLLMProvider(LLMProvider):
         except Exception as e:
             self.logger.error(f"Ollama LLM connection test failed: {e}")
             return False
+    
+    def generate_text_content(self, prompt: str, **kwargs) -> str:
+        """Generate plain text response from Ollama."""
+        url = f"{self.config.base_url}/api/generate"
+        payload = {
+            "model": self.config.model,
+            "prompt": prompt,
+            "stream": False
+        }
+        
+        # Apply any additional kwargs
+        payload.update(kwargs)
+        
+        for attempt in range(self.config.max_retries):
+            try:
+                response = requests.post(
+                    url,
+                    json=payload,
+                    timeout=self.config.timeout
+                )
+                response.raise_for_status()
+                
+                result = response.json()
+                response_text = result.get("response", "")
+                
+                if not response_text:
+                    raise ValueError("No response from Ollama")
+                
+                return response_text.strip()
+                
+            except Exception as e:
+                self.logger.warning(f"Ollama text generation attempt {attempt + 1} failed: {e}")
+                if attempt < self.config.max_retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                else:
+                    self.logger.error(f"Ollama text generation failed after {self.config.max_retries} attempts: {e}")
+                    raise
+    
+    def _make_llm_request(self, prompt: str, for_json: bool = False, **kwargs) -> str:
+        """Make Ollama-specific LLM request and return raw response text."""
+        url = f"{self.config.base_url}/api/generate"
+        payload = {
+            "model": self.config.model,
+            "prompt": prompt,
+            "stream": False
+        }
+        
+        # Add JSON format hint for JSON requests
+        if for_json:
+            payload["format"] = "json"
+        
+        # Apply any additional kwargs
+        payload.update(kwargs)
+        
+        response = requests.post(
+            url,
+            json=payload,
+            timeout=self.config.timeout
+        )
+        response.raise_for_status()
+        
+        result = response.json()
+        response_text = result.get("response", "")
+        
+        return response_text.strip()
 
 
 class GeminiLLMProvider(LLMProvider):
@@ -422,6 +584,71 @@ class GeminiLLMProvider(LLMProvider):
         except Exception as e:
             self.logger.error(f"Gemini LLM connection test failed: {e}")
             return False
+    
+    def generate_text_content(self, prompt: str, **kwargs) -> str:
+        """Generate plain text response from Gemini."""
+        # Set default generation config
+        generation_config = {
+            "temperature": 0.3,
+            "max_output_tokens": 2000,
+        }
+        
+        # Update with any provided kwargs
+        if 'generation_config' in kwargs:
+            generation_config.update(kwargs.pop('generation_config'))
+        
+        for attempt in range(self.config.max_retries):
+            try:
+                response = self.model.generate_content(
+                    prompt,
+                    generation_config=generation_config,
+                    **kwargs
+                )
+                
+                response_text = response.text.strip()
+                
+                if not response_text:
+                    raise ValueError("No response from Gemini")
+                
+                return response_text
+                
+            except Exception as e:
+                self.logger.warning(f"Gemini text generation attempt {attempt + 1} failed: {e}")
+                if attempt < self.config.max_retries - 1:
+                    time.sleep(2 ** attempt)  # Exponential backoff
+                else:
+                    self.logger.error(f"Gemini text generation failed after {self.config.max_retries} attempts: {e}")
+                    raise
+    
+    def _make_llm_request(self, prompt: str, for_json: bool = False, **kwargs) -> str:
+        """Make Gemini-specific LLM request and return raw response text."""
+        # Set default generation config
+        if for_json:
+            # Optimized settings for JSON generation
+            default_config = {
+                "temperature": 0.1,  # Low temperature for consistent JSON
+                "max_output_tokens": 2000,
+            }
+        else:
+            # Default settings for text generation
+            default_config = {
+                "temperature": 0.3,
+                "max_output_tokens": 2000,
+            }
+        
+        # Handle generation_config parameter
+        generation_config = default_config.copy()
+        if 'generation_config' in kwargs:
+            generation_config.update(kwargs.pop('generation_config'))
+        
+        response = self.model.generate_content(
+            prompt,
+            generation_config=generation_config,
+            **kwargs
+        )
+        
+        response_text = response.text.strip()
+        return response_text
 
 
 def create_llm_provider(config: LLMConfig) -> LLMProvider:

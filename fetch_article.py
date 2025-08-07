@@ -48,20 +48,51 @@ from src.utils import clean_filename_for_title
 from src.html_exporter import convert_json_to_html, generate_filename as html_generate_filename
 
 
+def validate_date(date_str: Optional[str]) -> Optional[str]:
+    """
+    Validate and fix publication dates.
+    
+    Args:
+        date_str: Date string in YYYY-MM-DD format
+        
+    Returns:
+        Valid date string or None
+    """
+    if not date_str:
+        return None
+    
+    try:
+        # Handle cases like "2025-08-00" by replacing 00 day with 01
+        if date_str.endswith('-00'):
+            date_str = date_str[:-2] + '01'
+        
+        # Parse and reformat to ensure validity
+        parsed_date = datetime.strptime(date_str, '%Y-%m-%d')
+        return parsed_date.strftime('%Y-%m-%d')
+    except ValueError:
+        # If parsing fails, return None
+        return None
+
+
 class ArticleFetcher:
     """Enhanced article fetcher with comprehensive analysis capabilities."""
     
     def __init__(self, config_path: str = "config.yaml", output_format: str = "json", 
                  output_dir: Optional[str] = None, output_console: bool = False, 
-                 non_interactive: bool = False):
+                 non_interactive: bool = False, include_summary: bool = False, 
+                 include_analysis: bool = False, llm_provider=None, config=None):
         """Initialize the article fetcher with configuration."""
-        self.config = load_config(config_path)
-        self.llm_provider = create_llm_provider(self.config.llm)
+        self.config = config or load_config(config_path)
+        self.llm_provider = llm_provider or create_llm_provider(self.config.llm)
         
         # Output configuration
         self.output_format = output_format
         self.output_console = output_console
         self.non_interactive = non_interactive
+        
+        # Content selection flags
+        self.include_summary = include_summary
+        self.include_analysis = include_analysis
         
         # Set up output directories
         if output_dir:
@@ -90,27 +121,31 @@ class ArticleFetcher:
 Return a valid JSON object with these exact fields:
 
 {{
-  "author": "string or null",
-  "title": "string", 
-  "publication_date": "YYYY-MM-DD or null",
-  "tags": ["topic1", "topic2", "topic3", "topic4", "topic5"],
-  "summary": "A concise 600-word maximum summary of the article",
-  "key_insights": ["insight1", "insight2", "insight3", "insight4", "insight5"],
-  "source_reliability": "Assessment of source credibility, potential bias, and factual accuracy",
-  "fact_checking": "Analysis of claims made, highlighting any potentially dubious statements",
-  "citations": ["key statistic or quote 1", "key statistic or quote 2", "reference 3"]
+  "metadata": {{
+    "author": "string or null",
+    "title": "string", 
+    "publication_date": "YYYY-MM-DD or null",
+    "tags": ["topic1", "topic2", "topic3", "topic4", "topic5"]
+  }},
+  "content": {{
+    "summary_md": "A concise 600-word maximum summary of the article in markdown format",
+    "highlight_md": "Key insights and takeaways in markdown format with bullet points or numbered list",
+    "source_reliability_md": "Assessment of source credibility, potential bias, and factual accuracy in markdown format",
+    "fact_checking_md": "Analysis of claims made, highlighting any potentially dubious statements in markdown format",
+    "citation_md": "Key statistics, quotes, and references mentioned in the article in markdown format"
+  }}
 }}
 
 Guidelines:
-- Author: Look for bylines, author sections, or extract from URL
-- Title: Extract main article title, clean and descriptive
-- Date: Find publication date in various formats
-- Tags: 5-7 relevant keywords/topics from content
-- Summary: Comprehensive yet concise overview (max 600 words)
-- Key Insights: 3-5 main takeaways or important points
-- Source Reliability: Evaluate credibility, bias, accuracy (2-3 sentences)
-- Fact Checking: Flag questionable claims or verify key facts (2-3 sentences)
-- Citations: Extract 2-5 key statistics, quotes, or references mentioned
+- metadata.author: Look for bylines, author sections, or extract from URL
+- metadata.title: Extract main article title, clean and descriptive
+- metadata.publication_date: Find publication date in various formats
+- metadata.tags: 5-7 relevant keywords/topics from content
+- content.summary_md: Comprehensive yet concise overview (max 600 words)
+- content.highlight_md: 3-5 main takeaways or important points as markdown list
+- content.source_reliability_md: Evaluate credibility, bias, accuracy (2-3 sentences)
+- content.fact_checking_md: Flag questionable claims or verify key facts (2-3 sentences)  
+- content.citation_md: Extract 2-5 key statistics, quotes, or references as markdown list
 
 Return valid JSON only, no other text.
 
@@ -150,6 +185,9 @@ CONTENT: {content}
             return article_data, "Success"
             
         except Exception as e:
+            # Suppress 403 errors to avoid noise in logs
+            if "403" in str(e) or "Forbidden" in str(e):
+                return None, f"Access denied (403)"
             self.logger.error(f"Error fetching article from {url}: {e}")
             return None, f"Error fetching article: {e}"
 
@@ -250,80 +288,42 @@ CONTENT: {content}
         )
         
         try:
-            # Use the existing LLM provider infrastructure
+            # Use the new generate_json_content method
             self.logger.debug("Calling LLM for analysis...")
-            response = self.llm_provider.model.generate_content(
+            analysis_result = self.llm_provider.generate_json_content(
                 prompt,
                 generation_config={
                     "temperature": 0.1,
                     "max_output_tokens": 2000,
                 }
             )
+            self.logger.debug(f"LLM JSON response received and parsed successfully")
             
-            response_text = response.text.strip()
-            self.logger.debug(f"LLM response received: {len(response_text)} characters")
+            # Extract and validate the new structure
+            metadata = analysis_result.get('metadata', {})
+            content = analysis_result.get('content', {})
             
-            # Parse JSON response
-            import re
-            # Remove markdown code block if present
-            match = re.match(r"^```(?:json)?\s*([\s\S]*?)\s*```$", response_text.strip(), re.IGNORECASE)
-            if match:
-                json_str = match.group(1)
-            else:
-                json_str = response_text.strip()
-            
-            # Clean up any extraneous characters and try parsing
-            json_str = json_str.strip()
-            if json_str.startswith('"') and not json_str.startswith('{"'):
-                # Sometimes the response starts with a quote, find the actual JSON
-                json_start = json_str.find('{')
-                if json_start != -1:
-                    json_str = json_str[json_start:]
-            
-            analysis_result = json.loads(json_str)
-            
-            # Validate and set defaults
             return {
-                'author': analysis_result.get('author'),
-                'title': analysis_result.get('title') or article_data['title'],
-                'publication_date': analysis_result.get('publication_date'),
-                'tags': analysis_result.get('tags', []),
-                'summary': analysis_result.get('summary', ''),
-                'key_insights': analysis_result.get('key_insights', []),
-                'source_reliability': analysis_result.get('source_reliability', ''),
-                'fact_checking': analysis_result.get('fact_checking', ''),
-                'citations': analysis_result.get('citations', [])
+                # Metadata fields
+                'author': metadata.get('author'),
+                'title': metadata.get('title') or article_data['title'],
+                'publication_date': validate_date(metadata.get('publication_date')),
+                'tags': metadata.get('tags', []),
+                
+                # Content fields
+                'summary_md': content.get('summary_md', ''),
+                'highlight_md': content.get('highlight_md', ''),
+                'source_reliability_md': content.get('source_reliability_md', ''),
+                'fact_checking_md': content.get('fact_checking_md', ''),
+                'citation_md': content.get('citation_md', '')
             }
             
         except json.JSONDecodeError as e:
             self.logger.error(f"JSON parsing failed: {e}")
-            self.logger.error(f"Raw LLM response (first 1000 chars): {response_text[:1000]}")
-            # Return fallback analysis
-            return {
-                'author': ', '.join(article_data['authors']) if article_data['authors'] else None,
-                'title': article_data['title'],
-                'publication_date': article_data['publish_date'].strftime('%Y-%m-%d') if article_data['publish_date'] else None,
-                'tags': [],
-                'summary': article_data['content'][:500] + '...' if len(article_data['content']) > 500 else article_data['content'],
-                'key_insights': [],
-                'source_reliability': 'Analysis unavailable',
-                'fact_checking': 'Analysis unavailable',
-                'citations': []
-            }
+            raise
         except Exception as e:
             self.logger.error(f"LLM analysis failed: {e}")
-            # Return fallback analysis
-            return {
-                'author': ', '.join(article_data['authors']) if article_data['authors'] else None,
-                'title': article_data['title'],
-                'publication_date': article_data['publish_date'].strftime('%Y-%m-%d') if article_data['publish_date'] else None,
-                'tags': [],
-                'summary': article_data['content'][:500] + '...' if len(article_data['content']) > 500 else article_data['content'],
-                'key_insights': [],
-                'source_reliability': 'Analysis unavailable',
-                'fact_checking': 'Analysis unavailable',
-                'citations': []
-            }
+            raise
 
     def display_analysis_for_approval(self, analysis: Dict[str, Any], article_data: Dict[str, Any]) -> Dict[str, Any]:
         """
@@ -408,7 +408,7 @@ CONTENT: {content}
         print(f"\n📅 PUBLICATION DATE: {analysis['publication_date'] or 'Unknown'}")
         date_input = input("Press ENTER to accept, or enter correct date (YYYY-MM-DD): ").strip()
         if date_input:
-            analysis['publication_date'] = date_input
+            analysis['publication_date'] = validate_date(date_input)
         
         # 4. Tags approval
         current_tags = ', '.join(analysis['tags']) if analysis['tags'] else 'None'
@@ -443,7 +443,7 @@ CONTENT: {content}
         current_date = analysis['publication_date'] or 'Unknown'
         new_date = input(f"Publication Date (YYYY-MM-DD) [{current_date}]: ").strip()
         if new_date:
-            analysis['publication_date'] = new_date
+            analysis['publication_date'] = validate_date(new_date)
         
         # Edit tags
         current_tags = ', '.join(analysis['tags']) if analysis['tags'] else 'None'
@@ -457,43 +457,58 @@ CONTENT: {content}
         
         return analysis
 
-    def create_structured_markdown(self, analysis: Dict[str, Any]) -> str:
+    def assemble_content(self, analysis: Dict[str, Any], article_data: Dict[str, Any]) -> str:
         """
-        Create structured markdown content for original_text field.
+        Assemble content based on flags.
+        
+        Flag Logic:
+        - No flags: newspaper3k clean content only
+        - --summary: summary_md + highlight_md only (NO original article)  
+        - --analysis: newspaper3k clean content + source_reliability_md + fact_checking_md + citation_md
+        - Both flags: summary_md + highlight_md + source_reliability_md + fact_checking_md + citation_md (NO original article)
         
         Returns:
-            Formatted markdown string
+            Assembled markdown content
         """
-        markdown_content = f"""## Summary
-
-{analysis['summary']}
-
-## Key Insights
-
-"""
+        content_parts = []
         
-        if analysis['key_insights']:
-            for insight in analysis['key_insights']:
-                markdown_content += f"- {insight}\n"
+        # Determine which content to include based on flags
+        if not self.include_summary and not self.include_analysis:
+            # No flags: return newspaper3k clean article content
+            return article_data['content']
+        
+        elif self.include_summary and not self.include_analysis:
+            # Summary only: summary + highlights, no original article
+            if analysis.get('summary_md'):
+                content_parts.append(f"## Summary\n\n{analysis['summary_md']}")
+            if analysis.get('highlight_md'):
+                content_parts.append(f"## Key Insights\n\n{analysis['highlight_md']}")
+                
+        elif not self.include_summary and self.include_analysis:
+            # Analysis only: original article + analysis sections
+            if article_data.get('content'):
+                content_parts.append(article_data['content'])
+            if analysis.get('source_reliability_md'):
+                content_parts.append(f"## Source Reliability Assessment\n\n{analysis['source_reliability_md']}")
+            if analysis.get('fact_checking_md'):
+                content_parts.append(f"## Fact-Checking Analysis\n\n{analysis['fact_checking_md']}")
+            if analysis.get('citation_md'):
+                content_parts.append(f"## Citations & References\n\n{analysis['citation_md']}")
+                
         else:
-            markdown_content += "- No key insights extracted\n"
+            # Both flags: summary + highlights + analysis, no original article
+            if analysis.get('summary_md'):
+                content_parts.append(f"## Summary\n\n{analysis['summary_md']}")
+            if analysis.get('highlight_md'):
+                content_parts.append(f"## Key Insights\n\n{analysis['highlight_md']}")
+            if analysis.get('source_reliability_md'):
+                content_parts.append(f"## Source Reliability Assessment\n\n{analysis['source_reliability_md']}")
+            if analysis.get('fact_checking_md'):
+                content_parts.append(f"## Fact-Checking Analysis\n\n{analysis['fact_checking_md']}")
+            if analysis.get('citation_md'):
+                content_parts.append(f"## Citations & References\n\n{analysis['citation_md']}")
         
-        markdown_content += f"""
-## Source Reliability Assessment
-
-{analysis['source_reliability']}
-
-## Fact-Checking Analysis
-
-{analysis['fact_checking']}
-"""
-        
-        if analysis['citations']:
-            markdown_content += "\n## Citations & References\n\n"
-            for citation in analysis['citations']:
-                markdown_content += f"- {citation}\n"
-        
-        return markdown_content
+        return '\n\n'.join(content_parts)
 
 
 
@@ -529,8 +544,8 @@ CONTENT: {content}
         Returns:
             Path to saved file or indication of console output
         """
-        # Create structured markdown content
-        original_text = self.create_structured_markdown(analysis)
+        # Assemble content based on flags
+        original_text = self.assemble_content(analysis, article_data)
         
         # Create JSON structure following existing convention
         json_data = {
@@ -570,7 +585,7 @@ CONTENT: {content}
             "title": clean_filename_for_title(analysis['title']),
             "author": analysis['author'],
             "publication_date": analysis['publication_date'] + "T00:00:00" if analysis['publication_date'] else None,
-            "original_text": self.create_structured_markdown(analysis),
+            "original_text": self.assemble_content(analysis, article_data),
             "source_url": article_data['url'],
             "notes": analysis.get('notes', ''),
             "tags": analysis['tags']
@@ -627,7 +642,7 @@ CONTENT: {content}
                     print("⏭️  Skipping due to duplicate content")
                     return False
         
-        # Step 3: Analyze with LLM
+        # Step 3: Always analyze with LLM for metadata extraction
         print("🤖 Analyzing article with LLM...")
         try:
             analysis = self.analyze_with_llm(article_data)
@@ -635,7 +650,8 @@ CONTENT: {content}
             import traceback
             print(f"❌ Error during LLM analysis: {e}")
             print(f"Traceback: {traceback.format_exc()}")
-            return False
+            # Re-raise to stop processing all URLs - LLM is down
+            raise
         
         # Step 4: Interactive approval or auto-accept
         if self.non_interactive:
@@ -723,17 +739,23 @@ def main():
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Interactive mode (current behavior)
-  python fetch_article.py https://example.com/article1
+  # Clean article content only (default)
+  python fetch_article.py https://example.com/article
 
-  # Non-interactive JSON output
-  python fetch_article.py --non-interactive --output-format=json https://example.com/article
+  # Summary and insights only (no original article)
+  python fetch_article.py --summary https://example.com/article
 
-  # Non-interactive HTML output to custom directory
-  python fetch_article.py --non-interactive --output-format=html --output-dir=./exports https://example.com/article
+  # Clean article + analysis sections
+  python fetch_article.py --analysis https://example.com/article
+
+  # Complete analysis without original content
+  python fetch_article.py --summary --analysis https://example.com/article
+
+  # Non-interactive automation with content selection
+  python fetch_article.py --non-interactive --summary --output-format=json https://example.com/article
 
   # Output to console for piping
-  python fetch_article.py --non-interactive --output-format=html --output-console https://example.com/article
+  python fetch_article.py --non-interactive --summary --analysis --output-console https://example.com/article
         """
     )
     
@@ -753,6 +775,12 @@ Examples:
     # Non-interactive mode
     parser.add_argument('--non-interactive', action='store_true',
                         help='Skip user prompts, auto-accept LLM analysis for automation')
+    
+    # Content selection flags
+    parser.add_argument('--summary', action='store_true',
+                        help='Include summary and key insights (excludes original article)')
+    parser.add_argument('--analysis', action='store_true',
+                        help='Include source reliability, fact-checking, and citations')
     
     args = parser.parse_args()
     
@@ -777,7 +805,9 @@ Examples:
             output_format=args.output_format,
             output_dir=args.output_dir,
             output_console=args.output_console,
-            non_interactive=args.non_interactive
+            non_interactive=args.non_interactive,
+            include_summary=args.summary,
+            include_analysis=args.analysis
         )
         
         # Process URLs and get results
