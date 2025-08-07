@@ -69,6 +69,7 @@ class QdrantVectorStore(VectorStore):
         'author': None,
         'title': None,
         'publication_date': None,
+        'source_url': None,  # Required for delete_document filtering
     }
 
     def __init__(self, config: VectorDBConfig):
@@ -86,6 +87,7 @@ class QdrantVectorStore(VectorStore):
                     'author': PayloadSchemaType.KEYWORD,
                     'title': PayloadSchemaType.KEYWORD,
                     'publication_date': PayloadSchemaType.DATETIME,
+                    'source_url': PayloadSchemaType.KEYWORD,
                 })
         except ImportError:
             raise ImportError("qdrant-client library is required. Install with: pip install qdrant-client")
