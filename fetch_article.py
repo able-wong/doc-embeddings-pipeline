@@ -343,29 +343,27 @@ CONTENT: {content}
         
         print(f"\n🏷️  Tags: {', '.join(analysis['tags']) if analysis['tags'] else 'None'}")
         
-        print(f"\n📋 SUMMARY ({len(analysis['summary'])} chars):")
+        print(f"\n📋 SUMMARY ({len(analysis['summary_md'])} chars):")
         print("-" * 40)
-        print(analysis['summary'])
+        print(analysis['summary_md'])
         
-        if analysis['key_insights']:
+        if analysis['highlight_md']:
             print(f"\n💡 KEY INSIGHTS:")
             print("-" * 40)
-            for i, insight in enumerate(analysis['key_insights'], 1):
-                print(f"{i}. {insight}")
+            print(analysis['highlight_md'])
         
         print(f"\n🔍 SOURCE RELIABILITY:")
         print("-" * 40)
-        print(analysis['source_reliability'])
+        print(analysis['source_reliability_md'])
         
         print(f"\n✅ FACT-CHECKING:")
         print("-" * 40)
-        print(analysis['fact_checking'])
+        print(analysis['fact_checking_md'])
         
-        if analysis['citations']:
+        if analysis['citation_md']:
             print(f"\n📊 KEY CITATIONS:")
             print("-" * 40)
-            for i, citation in enumerate(analysis['citations'], 1):
-                print(f"{i}. {citation}")
+            print(analysis['citation_md'])
         
         print("\n" + "="*80)
         print("Now let's review each field individually...")
@@ -396,7 +394,7 @@ CONTENT: {content}
         elif summary_choice.lower() == 'regenerate':
             return {'regenerate': True}
         elif summary_choice:
-            analysis['summary'] = summary_choice
+            analysis['summary_md'] = summary_choice
         
         # 2. Author approval
         print(f"\n✍️  AUTHOR: {analysis['author'] or 'Unknown'}")
