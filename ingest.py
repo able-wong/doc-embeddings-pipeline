@@ -8,13 +8,13 @@ documents, generates embeddings, and stores them in a vector database.
 
 import click
 import json
-
 import sys
 from datetime import datetime
 
-from src.config import load_config
-from src.pipeline import IngestionPipeline
-from src.utils import extract_filename_from_source_url
+# Lazy imports - heavy modules loaded only when needed
+# from src.config import load_config  # Moved to functions
+# from src.pipeline import IngestionPipeline  # Moved to functions  
+# from src.utils import extract_filename_from_source_url  # Moved to functions
 
 
 def print_json(data):
@@ -30,6 +30,10 @@ def cli(ctx, config):
     ctx.ensure_object(dict)
 
     try:
+        # Lazy import heavy modules only when CLI is actually used
+        from src.config import load_config
+        from src.pipeline import IngestionPipeline
+        
         ctx.obj['config'] = load_config(config)
         ctx.obj['pipeline'] = IngestionPipeline(ctx.obj['config'])
     except Exception as e:
@@ -110,6 +114,9 @@ def list_documents(ctx):
     click.echo(f"\nFound {len(documents)} supported documents:")
     click.echo("-" * 80)
 
+    # Lazy import utils
+    from src.utils import extract_filename_from_source_url
+    
     for doc in documents:
         filename = extract_filename_from_source_url(doc['source_url'])
         size_kb = doc['size'] / 1024
@@ -150,6 +157,9 @@ def reindex_all(ctx):
 @click.pass_context
 def search(ctx, query, limit, threshold, strategy, dense_weight, show_scores, output_format):
     """Search the vector database with a query string using different strategies."""
+    # Lazy import utils for display
+    from src.utils import extract_filename_from_source_url
+    
     pipeline = ctx.obj['pipeline']
     
     # Check search capabilities
