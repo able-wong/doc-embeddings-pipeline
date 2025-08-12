@@ -190,7 +190,7 @@ Examples:
             failed += 1
     
     # Print summary
-    print(f"\n📊 CONVERSION SUMMARY:")
+    print("\n📊 CONVERSION SUMMARY:")
     print(f"✅ Successfully converted: {successful}")
     if skipped > 0:
         print(f"⚠️  Skipped (already exist): {skipped}")

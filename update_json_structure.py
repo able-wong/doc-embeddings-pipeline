@@ -5,11 +5,9 @@ Maps fields and validates/regenerates tags as needed.
 """
 
 import json
-import os
-import re
 from pathlib import Path
 from datetime import datetime
-from typing import Dict, List, Any, Optional
+from typing import Dict, List, Any
 
 
 def validate_tags(tags: List[str], original_text: str) -> List[str]:

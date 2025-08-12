@@ -129,7 +129,7 @@ class HtmlHandler(BaseHandler):
                     insights.append(f"- {insight_text}")
             
             if insights:
-                sections.append(f"## Key Insights\n\n" + '\n'.join(insights))
+                sections.append("## Key Insights\n\n" + '\n'.join(insights))
         
         # Extract source reliability
         reliability_match = re.search(r'<div\s+class\s*=\s*["\']ai-reliability["\'][^>]*>(.*?)</div>', html_content, re.IGNORECASE | re.DOTALL)
@@ -161,7 +161,7 @@ class HtmlHandler(BaseHandler):
                     citations.append(f"- {citation_text}")
             
             if citations:
-                sections.append(f"## Citations & References\n\n" + '\n'.join(citations))
+                sections.append("## Citations & References\n\n" + '\n'.join(citations))
         
         return '\n\n'.join(sections)
     
@@ -193,7 +193,7 @@ class HtmlHandler(BaseHandler):
             try:
                 parser.feed(html_content)
                 metadata = parser.get_metadata()
-            except Exception as e:
+            except Exception:
                 # Fallback to empty metadata if parsing fails
                 metadata = {}
             

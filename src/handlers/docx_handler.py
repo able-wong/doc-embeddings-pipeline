@@ -2,7 +2,6 @@
 
 from pathlib import Path
 from typing import List
-from datetime import datetime
 
 from markitdown import MarkItDown
 

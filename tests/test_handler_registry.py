@@ -2,7 +2,6 @@
 
 import pytest
 from pathlib import Path
-from unittest.mock import Mock
 
 from src.handlers.base_handler import BaseHandler, HandlerRegistry
 from src.document_processor import ExtractedContent

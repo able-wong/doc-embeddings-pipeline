@@ -1,7 +1,7 @@
 """Tests for LLM providers."""
 
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 import json
 
 from src.llm_providers import OllamaLLMProvider, GeminiLLMProvider, create_llm_provider

@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 from datetime import datetime
 
-from src.document_processor import DocumentProcessor, DocumentMetadata, DocumentChunk
+from src.document_processor import DocumentProcessor, DocumentChunk
 from src.config import DocumentsConfig
 
 

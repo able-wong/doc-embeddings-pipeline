@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
+from typing import Dict, Any
 import requests
 import logging
 import json
@@ -7,7 +7,7 @@ import time
 import os
 import re
 from .config import LLMConfig
-from .utils import extract_filename_from_source_url, clean_filename_for_title, extract_date_from_filename
+from .utils import clean_filename_for_title, extract_date_from_filename
 from .content_shortener import ContentShortener
 
 
