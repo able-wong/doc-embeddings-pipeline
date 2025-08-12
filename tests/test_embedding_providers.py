@@ -235,7 +235,7 @@ def test_gemini_provider_env_api_key(mock_genai):
         gemini=GeminiEmbeddingConfig(api_key="", model="text-embedding-004")  # Empty key, should use env
     )
 
-    provider = GeminiEmbeddingProvider(config)
+    GeminiEmbeddingProvider(config)
     mock_genai.configure.assert_called_once_with(api_key="env_key")
 
 

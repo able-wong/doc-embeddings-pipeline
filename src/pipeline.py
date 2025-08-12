@@ -1,5 +1,4 @@
 import logging
-import os
 import json
 import time
 from datetime import datetime
@@ -11,6 +10,8 @@ from .document_processor import DocumentProcessor
 from .embedding_providers import create_embedding_provider
 from .vector_stores import create_vector_store
 from .llm_providers import create_llm_provider
+from .search import create_search_service
+from .sparse_embedding_providers import create_sparse_embedding_provider
 
 
 class IngestionPipeline:
@@ -24,7 +25,18 @@ class IngestionPipeline:
         self.document_processor = DocumentProcessor(config.documents)
         self.embedding_provider = create_embedding_provider(config.embedding)
         self.llm_provider = create_llm_provider(config.llm)
-        self.vector_store = create_vector_store(config.vector_db)
+        self.vector_store = create_vector_store(config.vector_db, config.sparse_embedding)
+        
+        # Initialize sparse embedding provider if configured
+        self.sparse_provider = None
+        if config.sparse_embedding:
+            try:
+                self.sparse_provider = create_sparse_embedding_provider(config.sparse_embedding)
+            except Exception as e:
+                self.logger.warning(f"Failed to initialize sparse embedding provider: {e}")
+        
+        # Initialize search service
+        self.search_service = create_search_service(self.vector_store, self.sparse_provider)
 
         # Setup logging
         self._setup_logging()
@@ -258,48 +270,6 @@ class IngestionPipeline:
             self.logger.error(f"Error searching documents: {e}")
             return []
 
-    def search_for_rag(self, query: str, limit: int = 5, threshold: float = 0.7) -> Dict[str, Any]:
-        """Search and format results specifically for RAG usage."""
-        try:
-            # Get search results
-            results = self.search_documents(query, limit, threshold)
-
-            if not results:
-                return {
-                    'query': query,
-                    'results': [],
-                    'context': '',
-                    'sources': []
-                }
-
-            # Format for RAG
-            context_parts = []
-            sources = []
-
-            for i, result in enumerate(results):
-                context_parts.append(f"[{i+1}] {result['chunk_text']}")
-                sources.append({
-                    'index': i + 1,
-                    'source_url': result['source_url'],
-                    'score': result['score']
-                })
-
-            return {
-                'query': query,
-                'results': results,
-                'context': '\n\n'.join(context_parts),
-                'sources': sources
-            }
-
-        except Exception as e:
-            self.logger.error(f"Error in RAG search: {e}")
-            return {
-                'query': query,
-                'results': [],
-                'context': '',
-                'sources': [],
-                'error': str(e)
-            }
 
     def list_documents(self) -> List[Dict[str, Any]]:
         """List all supported documents in the documents folder."""

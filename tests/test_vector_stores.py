@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import patch, MagicMock
 from datetime import datetime
 
 from src.vector_stores import QdrantVectorStore, create_vector_store
@@ -280,7 +280,9 @@ def test_get_stats_success(qdrant_store):
         "vectors_count": 150,
         "vector_dimension": 384,
         "distance_metric": "cosine",
-        "status": "green"
+        "status": "green",
+        "supports_sparse": False,
+        "supports_native_fusion": True
     }
 
     assert stats == expected_stats

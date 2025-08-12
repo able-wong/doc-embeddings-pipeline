@@ -1,6 +1,5 @@
 import pytest
-from unittest.mock import Mock, patch, MagicMock
-from pathlib import Path
+from unittest.mock import Mock, patch
 from datetime import datetime
 
 # Import the function to test
@@ -189,7 +188,7 @@ class TestArticleFetcher:
         with patch('pathlib.Path.glob') as mock_glob:
             mock_glob.return_value = [mock_json_file]
             
-            with patch('builtins.open', create=True) as mock_open:
+            with patch('builtins.open', create=True):
                 with patch('json.load') as mock_json_load:
                     mock_json_load.return_value = mock_data
                     

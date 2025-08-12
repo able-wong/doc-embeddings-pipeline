@@ -27,6 +27,16 @@ class SentenceTransformersConfig(BaseModel):
     device: str = "cpu"  # "cpu", "cuda", "mps" (for Apple Silicon)
 
 
+class SpladeConfig(BaseModel):
+    model: str = "naver/splade-cocondenser-ensembledistil"
+    device: str = "cpu"  # "cpu", "cuda", "mps" (for Apple Silicon)
+
+
+class SparseEmbeddingConfig(BaseModel):
+    provider: str = "splade"  # Currently only "splade" supported, future: "bm25", etc.
+    splade: Optional[SpladeConfig] = None
+
+
 class EmbeddingConfig(BaseModel):
     provider: str = "ollama"
     model: str = "nomic-embed-text"
@@ -90,6 +100,7 @@ class LoggingConfig(BaseModel):
 class Config(BaseModel):
     documents: DocumentsConfig
     embedding: EmbeddingConfig
+    sparse_embedding: Optional[SparseEmbeddingConfig] = None
     llm: Optional[LLMConfig] = None
     vector_db: VectorDBConfig
     logging: LoggingConfig
@@ -118,6 +129,13 @@ class Config(BaseModel):
                     device=os.getenv('SENTENCE_TRANSFORMERS_DEVICE', 'cpu')
                 ) if os.getenv('EMBEDDING_PROVIDER') == 'sentence_transformers' else None
             ),
+            sparse_embedding=SparseEmbeddingConfig(
+                provider=os.getenv('SPARSE_EMBEDDING_PROVIDER', 'splade'),
+                splade=SpladeConfig(
+                    model=os.getenv('SPLADE_MODEL', 'naver/splade-cocondenser-ensembledistil'),
+                    device=os.getenv('SPLADE_DEVICE', 'cpu')
+                ) if os.getenv('SPARSE_EMBEDDING_PROVIDER', 'splade') == 'splade' else None
+            ) if os.getenv('SPARSE_EMBEDDING_PROVIDER') else None,
             llm=LLMConfig(
                 provider=os.getenv('LLM_PROVIDER', 'ollama'),
                 model=os.getenv('LLM_MODEL', 'llama3.2'),

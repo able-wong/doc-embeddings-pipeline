@@ -19,7 +19,6 @@ Features:
 """
 
 import sys
-import os
 import argparse
 import json
 import re
@@ -35,11 +34,7 @@ except ImportError:
     print("Error: newspaper3k is not installed. Please run: pip install newspaper3k")
     sys.exit(1)
 
-try:
-    import markdown
-except ImportError:
-    print("Error: markdown is not installed. Please run: pip install markdown")
-    sys.exit(1)
+# Markdown functionality handled by html_exporter module
 
 # Local imports
 from src.config import load_config
@@ -187,7 +182,7 @@ CONTENT: {content}
         except Exception as e:
             # Suppress 403 errors to avoid noise in logs
             if "403" in str(e) or "Forbidden" in str(e):
-                return None, f"Access denied (403)"
+                return None, "Access denied (403)"
             self.logger.error(f"Error fetching article from {url}: {e}")
             return None, f"Error fetching article: {e}"
 
@@ -297,7 +292,7 @@ CONTENT: {content}
                     "max_output_tokens": 2000,
                 }
             )
-            self.logger.debug(f"LLM JSON response received and parsed successfully")
+            self.logger.debug("LLM JSON response received and parsed successfully")
             
             # Extract and validate the new structure
             metadata = analysis_result.get('metadata', {})
@@ -348,20 +343,20 @@ CONTENT: {content}
         print(analysis['summary_md'])
         
         if analysis['highlight_md']:
-            print(f"\n💡 KEY INSIGHTS:")
+            print("\n💡 KEY INSIGHTS:")
             print("-" * 40)
             print(analysis['highlight_md'])
         
-        print(f"\n🔍 SOURCE RELIABILITY:")
+        print("\n🔍 SOURCE RELIABILITY:")
         print("-" * 40)
         print(analysis['source_reliability_md'])
         
-        print(f"\n✅ FACT-CHECKING:")
+        print("\n✅ FACT-CHECKING:")
         print("-" * 40)
         print(analysis['fact_checking_md'])
         
         if analysis['citation_md']:
-            print(f"\n📊 KEY CITATIONS:")
+            print("\n📊 KEY CITATIONS:")
             print("-" * 40)
             print(analysis['citation_md'])
         
@@ -383,7 +378,7 @@ CONTENT: {content}
         print("For each field: Press ENTER to accept, or type your changes")
         
         # 1. Summary approval
-        print(f"\n📋 SUMMARY APPROVAL:")
+        print("\n📋 SUMMARY APPROVAL:")
         print("✅ Press ENTER to accept summary")
         print("🔄 Type 'regenerate' to regenerate analysis")
         print("❌ Type 'skip' to skip this article")
@@ -416,7 +411,7 @@ CONTENT: {content}
             analysis['tags'] = [tag.strip() for tag in tags_input.split(',')]
         
         # 5. Notes input
-        print(f"\n📝 NOTES:")
+        print("\n📝 NOTES:")
         notes_input = input("Enter any additional notes (optional): ").strip()
         analysis['notes'] = notes_input
         
@@ -721,7 +716,7 @@ CONTENT: {content}
         
         if not self.output_console:
             if not self.non_interactive:
-                print(f"\n🎉 PROCESSING COMPLETE!")
+                print("\n🎉 PROCESSING COMPLETE!")
             print(f"✅ Processed: {processed}")
             print(f"⏭️  Failed/Skipped: {failed}")
             if not self.output_console:

@@ -1,6 +1,6 @@
 import pytest
 import json
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from pathlib import Path
 
 from src.pipeline import IngestionPipeline
@@ -262,53 +262,6 @@ def test_search_documents(mock_doc_processor, mock_embedding_provider, mock_vect
     assert results[0]['filename'] == 'test.txt'
     mock_embedding.generate_embedding.assert_called_once_with("test query")
     mock_vector.search.assert_called_once_with([0.1, 0.2, 0.3], 5)
-
-
-@patch('src.pipeline.create_vector_store')
-@patch('src.pipeline.create_embedding_provider')
-@patch('src.pipeline.DocumentProcessor')
-def test_search_for_rag(mock_doc_processor, mock_embedding_provider, mock_vector_store, test_config):
-    """Test RAG-specific search formatting."""
-    # Mock the components
-    mock_doc_processor.return_value = Mock()
-
-    mock_embedding = Mock()
-    mock_embedding.generate_embedding.return_value = [0.1, 0.2, 0.3]
-    mock_embedding_provider.return_value = mock_embedding
-
-    mock_vector = Mock()
-    mock_vector.search.return_value = [
-        {
-            'score': 0.95,
-            'payload': {
-                'file_path': 'test.txt',
-                'filename': 'test.txt',
-                'chunk_text': 'First chunk',
-                'chunk_index': 0
-            }
-        },
-        {
-            'score': 0.85,
-            'payload': {
-                'file_path': 'test2.txt',
-                'filename': 'test2.txt',
-                'chunk_text': 'Second chunk',
-                'chunk_index': 1
-            }
-        }
-    ]
-    mock_vector_store.return_value = mock_vector
-
-    pipeline = IngestionPipeline(test_config)
-    result = pipeline.search_for_rag("test query", limit=2)
-
-    assert result['query'] == "test query"
-    assert len(result['results']) == 2
-    assert len(result['sources']) == 2
-    assert "[1] First chunk" in result['context']
-    assert "[2] Second chunk" in result['context']
-    assert result['sources'][0]['index'] == 1
-    assert result['sources'][1]['index'] == 2
 
 
 @patch('src.pipeline.create_vector_store')

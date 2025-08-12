@@ -35,14 +35,14 @@ jobs:
         python -m pip install --upgrade pip
         pip install -r requirements.txt
 
-    - name: Lint with flake8
+    - name: Lint with ruff
       run: |
-        # Install flake8 for linting
-        pip install flake8
-        # Stop the build if there are Python syntax errors or undefined names
-        flake8 . --count --select=E9,F63,F7,F82 --show-source --statistics --exclude=venv
-        # Exit-zero treats all errors as warnings. GitHub editor is 127 chars wide
-        flake8 . --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics --exclude=venv
+        # Install ruff for linting and formatting
+        pip install ruff
+        # Check for linting issues
+        ruff check .
+        # Check code formatting
+        ruff format --check .
 
     - name: Test with pytest
       run: |
