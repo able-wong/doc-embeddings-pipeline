@@ -24,6 +24,14 @@ This pipeline serves as the **foundation for RAG systems**, handling the critica
 - **Google Gemini** (Cloud API) - High-quality, scalable
 - **Sentence Transformers** (Local Python) - Lightweight, browser-compatible
 
+### 🔍 **Advanced Search Capabilities**
+
+- **Semantic Search** - Dense vector similarity for contextual understanding
+- **Exact Phrase Search** - Sparse vector indexing for precise keyword matching
+- **Hybrid Search** - Native Qdrant RRF fusion combining both approaches
+- **Multiple Search Strategies** - Auto, semantic, exact, hybrid_rrf, hybrid_weighted
+- **Flexible Output Formats** - Detailed, RAG-optimized, or JSON output
+
 ### 📁 **Comprehensive Document Support**
 
 - Text files (.txt, .md)
@@ -342,11 +350,15 @@ python3 ingest.py reindex-all
 # Add or update a specific document
 python3 ingest.py add-update path/to/document.pdf
 
-# Search documents (returns detailed results)
+# Search documents with different strategies
 python3 ingest.py search "machine learning algorithms" --limit 5
+python3 ingest.py search "neural networks" --strategy semantic --limit 3
+python3 ingest.py search "API endpoints" --strategy exact --threshold 0.0
+python3 ingest.py search "deep learning tutorials" --strategy hybrid_rrf --show-scores
 
-# RAG-formatted search (optimized for AI consumption)
-python3 ingest.py search-rag "explain neural networks" --limit 3
+# Different output formats
+python3 ingest.py search "data science" --format rag --limit 5
+python3 ingest.py search "AI algorithms" --format json --strategy auto
 
 # View collection statistics
 python3 ingest.py stats
@@ -385,6 +397,13 @@ embedding:
   
   sentence_transformers:
     model: "all-MiniLM-L6-v2"        # 384D, ~90MB, browser-compatible
+    device: "cpu"                    # or "cuda", "mps"
+
+# Sparse embedding for exact phrase matching (optional)
+sparse_embedding:
+  provider: "splade"                 # Neural sparse retrieval
+  splade:
+    model: "naver/splade-cocondenser-ensembledistil"
     device: "cpu"                    # or "cuda", "mps"
 
 # Vector database selection  
@@ -503,7 +522,7 @@ curl -X POST "http://localhost:6333/collections/documents/points/search" \
 
 ## 📊 Qdrant Collection Schema
 
-The pipeline stores document chunks in Qdrant with the following payload structure:
+The pipeline supports both **dense-only** and **hybrid** (dense + sparse) vector collections in Qdrant for different search capabilities.
 
 ### Payload Schema
 
@@ -527,10 +546,72 @@ The pipeline stores document chunks in Qdrant with the following payload structu
 }
 ```
 
-### Indexed Fields
+### Collection Types
 
-The pipeline automatically creates payload indices for optimal query performance:
+#### Dense-Only Collection (Default)
+```json
+{
+  "vectors_config": {
+    "size": 384,
+    "distance": "Cosine"
+  }
+}
+```
 
+#### Hybrid Collection (Dense + Sparse Vectors)
+```json
+{
+  "vectors_config": {
+    "dense": {
+      "size": 384,
+      "distance": "Cosine"
+    }
+  },
+  "sparse_vectors_config": {
+    "sparse": {
+      "index": {
+        "on_disk": false
+      }
+    }
+  }
+}
+```
+
+### Vector Storage Structure
+
+#### Dense-Only Points
+```json
+{
+  "id": "chunk_id",
+  "vector": [0.1, 0.2, 0.3, ...],    // 384-dimensional dense vector
+  "payload": { /* document metadata */ }
+}
+```
+
+#### Hybrid Points (Dense + Sparse)
+```json
+{
+  "id": "chunk_id",
+  "vector": {
+    "dense": [0.1, 0.2, 0.3, ...],   // Semantic similarity
+    "sparse": {                       // Exact phrase matching
+      "indices": [245, 1891, 7432],
+      "values": [0.8, 0.9, 0.7]
+    }
+  },
+  "payload": { /* document metadata */ }
+}
+```
+
+### Available Indices
+
+The pipeline automatically creates these indices for optimal query performance:
+
+#### Vector Indices
+- **Dense vector index** - HNSW index for semantic similarity search
+- **Sparse vector index** - Inverted index for exact phrase matching (hybrid collections only)
+
+#### Payload Indices  
 - **`tags`** - KEYWORD schema (array of strings for categorical filtering)
 - **`author`** - KEYWORD schema (exact matching for author queries)
 - **`title`** - KEYWORD schema (exact matching for document titles)
@@ -565,6 +646,146 @@ The pipeline supports pre-structured JSON files with the following format:
 - **High confidence** - Metadata accuracy depends on source extraction quality
 - **Fast processing** - Direct ingestion without content analysis
 - **Flexible source** - Can originate from web scrapers, APIs, or content management systems
+
+## 🔍 Search Capabilities
+
+The pipeline supports multiple search modes depending on your configuration:
+
+### Dense Vector Search (Default)
+Semantic similarity search using sentence transformers, Gemini, or Ollama embeddings:
+
+```python
+# Search for semantically similar content
+from qdrant_client import QdrantClient
+
+client = QdrantClient("localhost", port=6333)
+results = client.search(
+    collection_name="documents",
+    query_vector=query_embedding,  # Generated from your embedding provider
+    limit=5,
+    with_payload=True
+)
+```
+
+### Sparse Vector Search (Exact Phrase Matching)
+When `sparse_embedding` is configured, enables exact phrase and keyword matching:
+
+```python
+# Search for exact phrases and keywords
+from qdrant_client.models import NamedSparseVector, SparseVector
+
+results = client.search(
+    collection_name="documents",
+    query_vector=NamedSparseVector(
+        name="sparse",
+        vector=SparseVector(
+            indices=[245, 1891, 7432],  # Generated from SPLADE model
+            values=[0.8, 0.9, 0.7]
+        )
+    ),
+    limit=5,
+    with_payload=True
+)
+```
+
+### Hybrid Search (Best of Both Worlds)
+Combines semantic similarity with exact phrase matching for optimal relevance:
+
+```python
+# Perform both dense and sparse searches, then fuse results
+# This provides both semantic understanding and exact keyword matching
+# Implementation available in the pipeline's vector store classes
+```
+
+### CLI Search Commands
+
+The pipeline provides a unified search interface with multiple strategies:
+
+```bash
+# Check available search capabilities
+python3 ingest.py search-capabilities
+
+# Auto-strategy (chooses best approach based on availability)
+python3 ingest.py search "machine learning" --strategy auto
+
+# Semantic search (dense vectors)
+python3 ingest.py search "neural networks" --strategy semantic --limit 5
+
+# Exact phrase search (sparse vectors, requires sparse_embedding config)
+python3 ingest.py search "API endpoints" --strategy exact --threshold 0.0
+
+# Hybrid search with native RRF fusion
+python3 ingest.py search "deep learning tutorials" --strategy hybrid_rrf --show-scores
+
+# Hybrid search with weighted fusion
+python3 ingest.py search "data science" --strategy hybrid_weighted --dense-weight 0.7
+
+# Different output formats
+python3 ingest.py search "AI algorithms" --format rag      # Context + sources
+python3 ingest.py search "ML models" --format json         # Machine readable
+python3 ingest.py search "embeddings" --format detailed    # Full details (default)
+```
+
+### Search Mode Comparison
+
+| Search Mode | CLI Strategy | Best For | Strengths | Use Cases |
+|-------------|--------------|----------|-----------|-----------|
+| **Dense Only** | `semantic` | Semantic similarity | Understands context and meaning | "Find documents about machine learning" |
+| **Sparse Only** | `exact` | Exact keywords | Precise term matching | "Find documents containing 'API key'" |
+| **Hybrid RRF** | `hybrid_rrf` | Best relevance | Native Qdrant fusion, single API call | "Find ML tutorials with code examples" |
+| **Hybrid Weighted** | `hybrid_weighted` | Custom balance | Adjustable dense/sparse weights | "Balance semantics and exact matches" |
+| **Auto** | `auto` | Convenience | Chooses best available strategy | "Just give me the best results" |
+
+### RAG Integration Examples
+
+#### Python (Qdrant Client)
+```python
+from qdrant_client import QdrantClient
+
+client = QdrantClient("localhost", port=6333)
+
+# Dense search for RAG context
+results = client.search(
+    collection_name="documents",
+    query_vector=query_embedding,
+    limit=5,
+    with_payload=True
+)
+
+# Extract text for LLM context
+context_chunks = [hit.payload["chunk_text"] for hit in results]
+```
+
+#### TypeScript/JavaScript
+```typescript
+import { QdrantClient } from '@qdrant/js-client-rest';
+
+const client = new QdrantClient({
+  url: 'http://localhost:6333',
+});
+
+// Search for relevant context
+const results = await client.search('documents', {
+  vector: queryEmbedding,
+  limit: 5,
+  with_payload: true,
+});
+
+// Use in RAG application
+const contextChunks = results.map(hit => hit.payload.chunk_text);
+```
+
+#### REST API
+```bash
+# Direct API access for any language
+curl -X POST "http://localhost:6333/collections/documents/points/search" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "vector": [0.1, 0.2, 0.3, ...],
+    "limit": 5,
+    "with_payload": true
+  }'
+```
 
 ## 🎭 Embedding Model Comparison
 
@@ -657,8 +878,10 @@ python3 ingest.py reindex-all  # Check logs for performance metrics
 - Document processing: `markitdown`, `pypdf`, `html-to-markdown`, `markdown`
 - Article fetching: `newspaper3k`, `lxml_html_clean`
 - Embeddings: `google-generativeai`, `sentence-transformers`
+- Sparse vectors: `transformers`, `torch` (for SPLADE neural sparse retrieval)
 - Vector storage: `qdrant-client`
 - Testing: `pytest`, `pytest-mock`
+- Linting: `ruff`
 
 ## 🚀 Deployment Options
 
