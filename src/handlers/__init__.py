@@ -9,12 +9,12 @@ from .html_handler import HtmlHandler
 from .json_handler import JsonHandler
 
 __all__ = [
-    'BaseHandler',
-    'HandlerRegistry',
-    'TxtHandler',
-    'MarkdownHandler', 
-    'DocxHandler',
-    'PdfHandler',
-    'HtmlHandler',
-    'JsonHandler'
+    "BaseHandler",
+    "HandlerRegistry",
+    "TxtHandler",
+    "MarkdownHandler",
+    "DocxHandler",
+    "PdfHandler",
+    "HtmlHandler",
+    "JsonHandler",
 ]

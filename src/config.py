@@ -27,6 +27,16 @@ class SentenceTransformersConfig(BaseModel):
     device: str = "cpu"  # "cpu", "cuda", "mps" (for Apple Silicon)
 
 
+class SpladeConfig(BaseModel):
+    model: str = "naver/splade-cocondenser-ensembledistil"
+    device: str = "cpu"  # "cpu", "cuda", "mps" (for Apple Silicon)
+
+
+class SparseEmbeddingConfig(BaseModel):
+    provider: str = "splade"  # Currently only "splade" supported, future: "bm25", etc.
+    splade: Optional[SpladeConfig] = None
+
+
 class EmbeddingConfig(BaseModel):
     provider: str = "ollama"
     model: str = "nomic-embed-text"
@@ -42,8 +52,12 @@ class LLMConfig(BaseModel):
     base_url: str = "http://localhost:11434"
     timeout: int = 120
     content_max_chars: int = 8000  # Maximum characters to send to LLM for analysis
-    auto_detect_context_limit: bool = True  # Automatically adjust based on model capabilities
-    context_utilization: float = 0.25  # Percentage of context window to use (0.25 = 25%)
+    auto_detect_context_limit: bool = (
+        True  # Automatically adjust based on model capabilities
+    )
+    context_utilization: float = (
+        0.25  # Percentage of context window to use (0.25 = 25%)
+    )
     gemini: Optional[GeminiLLMConfig] = None
     metadata_extraction_prompt: str = """You are a metadata extraction assistant. Your task is to analyze the provided document and extract specific metadata fields.
 
@@ -90,64 +104,85 @@ class LoggingConfig(BaseModel):
 class Config(BaseModel):
     documents: DocumentsConfig
     embedding: EmbeddingConfig
+    sparse_embedding: Optional[SparseEmbeddingConfig] = None
     llm: Optional[LLMConfig] = None
     vector_db: VectorDBConfig
     logging: LoggingConfig
 
     @classmethod
-    def from_env(cls) -> 'Config':
+    def from_env(cls) -> "Config":
         """Create configuration from environment variables."""
         return cls(
             documents=DocumentsConfig(
-                folder_path=os.getenv('DOCUMENTS_FOLDER', './documents'),
+                folder_path=os.getenv("DOCUMENTS_FOLDER", "./documents"),
                 supported_extensions=[".txt", ".docx", ".pdf", ".md", ".html"],
-                chunk_size=int(os.getenv('CHUNK_SIZE', '1000')),
-                chunk_overlap=int(os.getenv('CHUNK_OVERLAP', '200'))
+                chunk_size=int(os.getenv("CHUNK_SIZE", "1000")),
+                chunk_overlap=int(os.getenv("CHUNK_OVERLAP", "200")),
             ),
             embedding=EmbeddingConfig(
-                provider=os.getenv('EMBEDDING_PROVIDER', 'ollama'),
-                model=os.getenv('EMBEDDING_MODEL', 'nomic-embed-text'),
-                base_url=os.getenv('OLLAMA_BASE_URL', 'http://localhost:11434'),
-                timeout=int(os.getenv('EMBEDDING_TIMEOUT', '60')),
+                provider=os.getenv("EMBEDDING_PROVIDER", "ollama"),
+                model=os.getenv("EMBEDDING_MODEL", "nomic-embed-text"),
+                base_url=os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"),
+                timeout=int(os.getenv("EMBEDDING_TIMEOUT", "60")),
                 gemini=GeminiEmbeddingConfig(
-                    api_key=os.getenv('GEMINI_API_KEY', ''),
-                    model=os.getenv('GEMINI_EMBEDDING_MODEL', 'text-embedding-004')
-                ) if os.getenv('EMBEDDING_PROVIDER') == 'gemini' else None,
+                    api_key=os.getenv("GEMINI_API_KEY", ""),
+                    model=os.getenv("GEMINI_EMBEDDING_MODEL", "text-embedding-004"),
+                )
+                if os.getenv("EMBEDDING_PROVIDER") == "gemini"
+                else None,
                 sentence_transformers=SentenceTransformersConfig(
-                    model=os.getenv('SENTENCE_TRANSFORMERS_MODEL', 'all-MiniLM-L6-v2'),
-                    device=os.getenv('SENTENCE_TRANSFORMERS_DEVICE', 'cpu')
-                ) if os.getenv('EMBEDDING_PROVIDER') == 'sentence_transformers' else None
+                    model=os.getenv("SENTENCE_TRANSFORMERS_MODEL", "all-MiniLM-L6-v2"),
+                    device=os.getenv("SENTENCE_TRANSFORMERS_DEVICE", "cpu"),
+                )
+                if os.getenv("EMBEDDING_PROVIDER") == "sentence_transformers"
+                else None,
             ),
+            sparse_embedding=SparseEmbeddingConfig(
+                provider=os.getenv("SPARSE_EMBEDDING_PROVIDER", "splade"),
+                splade=SpladeConfig(
+                    model=os.getenv(
+                        "SPLADE_MODEL", "naver/splade-cocondenser-ensembledistil"
+                    ),
+                    device=os.getenv("SPLADE_DEVICE", "cpu"),
+                )
+                if os.getenv("SPARSE_EMBEDDING_PROVIDER", "splade") == "splade"
+                else None,
+            )
+            if os.getenv("SPARSE_EMBEDDING_PROVIDER")
+            else None,
             llm=LLMConfig(
-                provider=os.getenv('LLM_PROVIDER', 'ollama'),
-                model=os.getenv('LLM_MODEL', 'llama3.2'),
-                base_url=os.getenv('LLM_BASE_URL', 'http://localhost:11434'),
-                timeout=int(os.getenv('LLM_TIMEOUT', '120')),
-                content_max_chars=int(os.getenv('LLM_CONTENT_MAX_CHARS', '8000')),
-                auto_detect_context_limit=os.getenv('LLM_AUTO_DETECT_CONTEXT', 'true').lower() == 'true',
-                context_utilization=float(os.getenv('LLM_CONTEXT_UTILIZATION', '0.25')),
+                provider=os.getenv("LLM_PROVIDER", "ollama"),
+                model=os.getenv("LLM_MODEL", "llama3.2"),
+                base_url=os.getenv("LLM_BASE_URL", "http://localhost:11434"),
+                timeout=int(os.getenv("LLM_TIMEOUT", "120")),
+                content_max_chars=int(os.getenv("LLM_CONTENT_MAX_CHARS", "8000")),
+                auto_detect_context_limit=os.getenv(
+                    "LLM_AUTO_DETECT_CONTEXT", "true"
+                ).lower()
+                == "true",
+                context_utilization=float(os.getenv("LLM_CONTEXT_UTILIZATION", "0.25")),
                 gemini=GeminiLLMConfig(
-                    api_key=os.getenv('GEMINI_API_KEY', ''),
-                    model=os.getenv('GEMINI_LLM_MODEL', 'gemini-1.5-flash')
-                ) if os.getenv('LLM_PROVIDER') == 'gemini' else None,
+                    api_key=os.getenv("GEMINI_API_KEY", ""),
+                    model=os.getenv("GEMINI_LLM_MODEL", "gemini-1.5-flash"),
+                )
+                if os.getenv("LLM_PROVIDER") == "gemini"
+                else None,
                 metadata_extraction_prompt=os.getenv(
-                    'METADATA_EXTRACTION_PROMPT',
-                    LLMConfig.model_fields['metadata_extraction_prompt'].default
+                    "METADATA_EXTRACTION_PROMPT",
+                    LLMConfig.model_fields["metadata_extraction_prompt"].default,
                 ),
-                max_retries=int(os.getenv('LLM_MAX_RETRIES', '3'))
+                max_retries=int(os.getenv("LLM_MAX_RETRIES", "3")),
             ),
             vector_db=VectorDBConfig(
-                provider=os.getenv('VECTOR_DB_PROVIDER', 'qdrant'),
-                host=os.getenv('QDRANT_HOST', 'localhost'),
-                port=int(os.getenv('QDRANT_PORT', '6333')),
-                url=os.getenv('QDRANT_URL'),
-                api_key=os.getenv('QDRANT_API_KEY'),
-                collection_name=os.getenv('COLLECTION_NAME', 'documents'),
-                distance_metric=os.getenv('DISTANCE_METRIC', 'cosine')
+                provider=os.getenv("VECTOR_DB_PROVIDER", "qdrant"),
+                host=os.getenv("QDRANT_HOST", "localhost"),
+                port=int(os.getenv("QDRANT_PORT", "6333")),
+                url=os.getenv("QDRANT_URL"),
+                api_key=os.getenv("QDRANT_API_KEY"),
+                collection_name=os.getenv("COLLECTION_NAME", "documents"),
+                distance_metric=os.getenv("DISTANCE_METRIC", "cosine"),
             ),
-            logging=LoggingConfig(
-                level=os.getenv('LOG_LEVEL', 'INFO')
-            )
+            logging=LoggingConfig(level=os.getenv("LOG_LEVEL", "INFO")),
         )
 
 
@@ -156,12 +191,12 @@ def load_config(config_path: str = "config.yaml") -> Config:
     config_file = Path(config_path)
 
     # If CONFIG_FROM_ENV=true, use environment variables only
-    if os.getenv('CONFIG_FROM_ENV', 'false').lower() == 'true':
+    if os.getenv("CONFIG_FROM_ENV", "false").lower() == "true":
         return Config.from_env()
 
     # If config file exists, use it (current behavior)
     if config_file.exists():
-        with open(config_file, 'r') as f:
+        with open(config_file, "r") as f:
             config_data = yaml.safe_load(f)
         return Config(**config_data)
 
@@ -170,4 +205,6 @@ def load_config(config_path: str = "config.yaml") -> Config:
         return Config.from_env()
     except Exception:
         # If environment variables are incomplete, raise original error
-        raise FileNotFoundError(f"Configuration file not found: {config_path}. Set CONFIG_FROM_ENV=true to use environment variables.")
+        raise FileNotFoundError(
+            f"Configuration file not found: {config_path}. Set CONFIG_FROM_ENV=true to use environment variables."
+        )

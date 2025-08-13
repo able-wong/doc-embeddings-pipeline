@@ -1,5 +1,4 @@
 import logging
-import os
 import json
 import time
 from datetime import datetime
@@ -11,6 +10,8 @@ from .document_processor import DocumentProcessor
 from .embedding_providers import create_embedding_provider
 from .vector_stores import create_vector_store
 from .llm_providers import create_llm_provider
+from .search import create_search_service
+from .sparse_embedding_providers import create_sparse_embedding_provider
 
 
 class IngestionPipeline:
@@ -24,7 +25,26 @@ class IngestionPipeline:
         self.document_processor = DocumentProcessor(config.documents)
         self.embedding_provider = create_embedding_provider(config.embedding)
         self.llm_provider = create_llm_provider(config.llm)
-        self.vector_store = create_vector_store(config.vector_db)
+        self.vector_store = create_vector_store(
+            config.vector_db, config.sparse_embedding
+        )
+
+        # Initialize sparse embedding provider if configured
+        self.sparse_provider = None
+        if config.sparse_embedding:
+            try:
+                self.sparse_provider = create_sparse_embedding_provider(
+                    config.sparse_embedding
+                )
+            except Exception as e:
+                self.logger.warning(
+                    f"Failed to initialize sparse embedding provider: {e}"
+                )
+
+        # Initialize search service
+        self.search_service = create_search_service(
+            self.vector_store, self.embedding_provider, self.sparse_provider
+        )
 
         # Setup logging
         self._setup_logging()
@@ -34,8 +54,8 @@ class IngestionPipeline:
         log_level = getattr(logging, self.config.logging.level.upper())
         logging.basicConfig(
             level=log_level,
-            format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S'
+            format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+            datefmt="%Y-%m-%d %H:%M:%S",
         )
 
     def test_connections(self) -> Dict[str, bool]:
@@ -46,24 +66,24 @@ class IngestionPipeline:
 
         # Test embedding provider
         try:
-            results['embedding_provider'] = self.embedding_provider.test_connection()
+            results["embedding_provider"] = self.embedding_provider.test_connection()
         except Exception as e:
             self.logger.error(f"Embedding provider test failed: {e}")
-            results['embedding_provider'] = False
+            results["embedding_provider"] = False
 
         # Test vector store
         try:
-            results['vector_store'] = self.vector_store.test_connection()
+            results["vector_store"] = self.vector_store.test_connection()
         except Exception as e:
             self.logger.error(f"Vector store test failed: {e}")
-            results['vector_store'] = False
+            results["vector_store"] = False
 
         # Test LLM provider
         try:
-            results['llm_provider'] = self.llm_provider.test_connection()
+            results["llm_provider"] = self.llm_provider.test_connection()
         except Exception as e:
             self.logger.error(f"LLM provider test failed: {e}")
-            results['llm_provider'] = False
+            results["llm_provider"] = False
 
         return results
 
@@ -73,29 +93,37 @@ class IngestionPipeline:
 
         # Check if collection exists
         exists = self.vector_store.collection_exists()
-        result['exists'] = exists
+        result["exists"] = exists
 
         if exists:
             # Get collection info
             info = self.vector_store.get_collection_info()
-            result['info'] = info
+            result["info"] = info
 
             # Validate embedding dimensions
             try:
                 embedding_dim = self.embedding_provider.get_embedding_dimension()
-                result['embedding_dimension'] = embedding_dim
+                result["embedding_dimension"] = embedding_dim
 
                 if info:
-                    collection_dim = info.get('result', {}).get('config', {}).get('params', {}).get('vectors', {}).get('size', 0)
-                    result['collection_dimension'] = collection_dim
-                    result['dimensions_match'] = embedding_dim == collection_dim
+                    collection_dim = (
+                        info.get("result", {})
+                        .get("config", {})
+                        .get("params", {})
+                        .get("vectors", {})
+                        .get("size", 0)
+                    )
+                    result["collection_dimension"] = collection_dim
+                    result["dimensions_match"] = embedding_dim == collection_dim
 
-                    if not result['dimensions_match']:
-                        self.logger.warning(f"Dimension mismatch: embedding={embedding_dim}, collection={collection_dim}")
+                    if not result["dimensions_match"]:
+                        self.logger.warning(
+                            f"Dimension mismatch: embedding={embedding_dim}, collection={collection_dim}"
+                        )
 
             except Exception as e:
                 self.logger.error(f"Error checking dimensions: {e}")
-                result['dimension_error'] = str(e)
+                result["dimension_error"] = str(e)
 
         return result
 
@@ -104,7 +132,7 @@ class IngestionPipeline:
         if self.vector_store.collection_exists():
             # Validate dimensions
             check_result = self.check_collection()
-            if check_result.get('dimensions_match', False):
+            if check_result.get("dimensions_match", False):
                 return True
             else:
                 self.logger.error("Collection exists but dimensions don't match")
@@ -114,24 +142,28 @@ class IngestionPipeline:
             embedding_dim = self.embedding_provider.get_embedding_dimension()
             return self.vector_store.create_collection(embedding_dim)
 
-    def _find_file_by_name(self, files: List[Path], filename: str, base_folder: Path) -> Optional[Path]:
+    def _find_file_by_name(
+        self, files: List[Path], filename: str, base_folder: Path
+    ) -> Optional[Path]:
         """
         Find a file from a list by matching filename, relative path, or full path.
-        
+
         Args:
             files: List of Path objects to search through
             filename: Target filename/path to match
             base_folder: Base folder for computing relative paths
-            
+
         Returns:
             Matching Path object or None if not found
         """
         for file_path in files:
             relative_path = str(file_path.relative_to(base_folder))
             # Match by filename, relative path, or full path
-            if (file_path.name == filename or 
-                relative_path == filename or 
-                str(file_path) == filename):
+            if (
+                file_path.name == filename
+                or relative_path == filename
+                or str(file_path) == filename
+            ):
                 return file_path
         return None
 
@@ -140,7 +172,9 @@ class IngestionPipeline:
         try:
             # Find the file
             files = self.document_processor.get_supported_files()
-            target_file = self._find_file_by_name(files, filename, self.config.documents.folder_path)
+            target_file = self._find_file_by_name(
+                files, filename, self.config.documents.folder_path
+            )
 
             if not target_file:
                 self.logger.error(f"File not found: {filename}")
@@ -152,13 +186,15 @@ class IngestionPipeline:
                 return False
 
             # Delete existing chunks for this document
-            relative_path = str(target_file.relative_to(self.config.documents.folder_path))
+            relative_path = str(
+                target_file.relative_to(self.config.documents.folder_path)
+            )
             source_url = f"file:{relative_path}"
             self.vector_store.delete_document(source_url)
 
             # Process document using shared method
             result = self._process_single_document(target_file)
-            return result['success']
+            return result["success"]
 
         except Exception as e:
             self.logger.error(f"Error processing {filename}: {e}")
@@ -177,10 +213,18 @@ class IngestionPipeline:
                 return False
 
             # Ensure payload indices exist for metadata fields
-            required_indices = ['tags', 'author', 'publication_date', 'title', 'source_url']
+            required_indices = [
+                "tags",
+                "author",
+                "publication_date",
+                "title",
+                "source_url",
+            ]
             self.logger.info("Ensuring payload indices exist for metadata fields...")
             if not self.vector_store.ensure_payload_indices(required_indices):
-                self.logger.warning("Some payload indices could not be created, but continuing with reindexing")
+                self.logger.warning(
+                    "Some payload indices could not be created, but continuing with reindexing"
+                )
             else:
                 self.logger.info("✓ Payload indices are ready")
 
@@ -198,108 +242,18 @@ class IngestionPipeline:
             # Process each file
             for file_path in files:
                 result = self._process_single_document(file_path)
-                if result['success']:
+                if result["success"]:
                     success_count += 1
-                    total_chunks += result['chunks']
+                    total_chunks += result["chunks"]
 
-            self.logger.info(f"Reindexing complete: {success_count}/{len(files)} files, {total_chunks} total chunks")
+            self.logger.info(
+                f"Reindexing complete: {success_count}/{len(files)} files, {total_chunks} total chunks"
+            )
             return success_count > 0
 
         except Exception as e:
             self.logger.error(f"Error during reindexing: {e}")
             return False
-
-    def search_documents(self, query: str, limit: int = 10, threshold: float = 0.7) -> List[Dict[str, Any]]:
-        """Search documents with a query string."""
-        try:
-            # Generate query embedding
-            query_embedding = self.embedding_provider.generate_embedding(query)
-
-            # Search vector store
-            results = self.vector_store.search(query_embedding, limit)
-
-            # Format and filter results
-            formatted_results = []
-            for result in results:
-                score = result.get('score', 0)
-
-                # Apply threshold filter
-                if score < threshold:
-                    continue
-
-                payload = result.get('payload', {})
-                # Try to get filename from payload, else parse from source_url
-                filename = payload.get('filename')
-                if not filename:
-                    source_url = payload.get('source_url', '')
-                    # If source_url is like 'file:some/path/file.txt', extract last part
-                    if source_url.startswith('file:'):
-                        filename = source_url.split(':', 1)[1].split('/')[-1]
-                    else:
-                        filename = ''
-
-                formatted_result = {
-                    'score': score,
-                    'source_url': payload.get('source_url', ''),
-                    'filename': filename,
-                    'chunk_text': payload.get('chunk_text', ''),
-                    'chunk_index': payload.get('chunk_index', 0),
-                    # Include new metadata fields
-                    'author': payload.get('author'),
-                    'title': payload.get('title'),
-                    'publication_date': payload.get('publication_date'),
-                    'tags': payload.get('tags', [])
-                }
-                formatted_results.append(formatted_result)
-
-            return formatted_results
-
-        except Exception as e:
-            self.logger.error(f"Error searching documents: {e}")
-            return []
-
-    def search_for_rag(self, query: str, limit: int = 5, threshold: float = 0.7) -> Dict[str, Any]:
-        """Search and format results specifically for RAG usage."""
-        try:
-            # Get search results
-            results = self.search_documents(query, limit, threshold)
-
-            if not results:
-                return {
-                    'query': query,
-                    'results': [],
-                    'context': '',
-                    'sources': []
-                }
-
-            # Format for RAG
-            context_parts = []
-            sources = []
-
-            for i, result in enumerate(results):
-                context_parts.append(f"[{i+1}] {result['chunk_text']}")
-                sources.append({
-                    'index': i + 1,
-                    'source_url': result['source_url'],
-                    'score': result['score']
-                })
-
-            return {
-                'query': query,
-                'results': results,
-                'context': '\n\n'.join(context_parts),
-                'sources': sources
-            }
-
-        except Exception as e:
-            self.logger.error(f"Error in RAG search: {e}")
-            return {
-                'query': query,
-                'results': [],
-                'context': '',
-                'sources': [],
-                'error': str(e)
-            }
 
     def list_documents(self) -> List[Dict[str, Any]]:
         """List all supported documents in the documents folder."""
@@ -309,13 +263,15 @@ class IngestionPipeline:
             documents = []
             for file_path in files:
                 stat = file_path.stat()
-                documents.append({
-                    'source_url': f"file:{file_path.relative_to(self.config.documents.folder_path)}",
-                    'filename': file_path.name,
-                    'extension': file_path.suffix,
-                    'size': stat.st_size,
-                    'last_modified': stat.st_mtime
-                })
+                documents.append(
+                    {
+                        "source_url": f"file:{file_path.relative_to(self.config.documents.folder_path)}",
+                        "filename": file_path.name,
+                        "extension": file_path.suffix,
+                        "size": stat.st_size,
+                        "last_modified": stat.st_mtime,
+                    }
+                )
 
             return documents
 
@@ -329,7 +285,7 @@ class IngestionPipeline:
             return self.vector_store.get_stats()
         except Exception as e:
             self.logger.error(f"Error getting stats: {e}")
-            return {'error': str(e)}
+            return {"error": str(e)}
 
     def clear_all_documents(self) -> bool:
         """Clear all documents from the vector database."""
@@ -342,7 +298,7 @@ class IngestionPipeline:
     def _process_single_document(self, file_path: Path) -> Dict[str, Any]:
         """
         Process a single document through the complete pipeline.
-        
+
         Returns:
             Dict with 'success': bool, 'chunks': int, 'message': str
         """
@@ -350,14 +306,16 @@ class IngestionPipeline:
             self.logger.info(f"Processing {file_path.name}...")
 
             # Process document with LLM metadata extraction
-            chunks = self.document_processor.process_document(file_path, self.llm_provider)
+            chunks = self.document_processor.process_document(
+                file_path, self.llm_provider
+            )
 
             if not chunks:
                 self.logger.warning(f"No chunks generated for {file_path.name}")
                 return {
-                    'success': True,  # Not an error, just no chunks
-                    'chunks': 0,
-                    'message': f"No chunks generated for {file_path.name}"
+                    "success": True,  # Not an error, just no chunks
+                    "chunks": 0,
+                    "message": f"No chunks generated for {file_path.name}",
                 }
 
             # Generate embeddings
@@ -366,41 +324,47 @@ class IngestionPipeline:
 
             # Insert into vector store
             if self.vector_store.insert_documents(chunks, embeddings):
-                self.logger.info(f"Successfully processed {file_path.name}: {len(chunks)} chunks")
+                self.logger.info(
+                    f"Successfully processed {file_path.name}: {len(chunks)} chunks"
+                )
                 return {
-                    'success': True,
-                    'chunks': len(chunks),
-                    'message': f"Successfully processed {file_path.name}: {len(chunks)} chunks"
+                    "success": True,
+                    "chunks": len(chunks),
+                    "message": f"Successfully processed {file_path.name}: {len(chunks)} chunks",
                 }
             else:
                 self.logger.error(f"Failed to insert chunks for {file_path.name}")
                 return {
-                    'success': False,
-                    'chunks': 0,
-                    'message': f"Failed to insert chunks for {file_path.name}"
+                    "success": False,
+                    "chunks": 0,
+                    "message": f"Failed to insert chunks for {file_path.name}",
                 }
 
         except Exception as e:
             self.logger.error(f"Error processing {file_path.name}: {e}")
             return {
-                'success': False,
-                'chunks': 0,
-                'message': f"Error processing {file_path.name}: {e}"
+                "success": False,
+                "chunks": 0,
+                "message": f"Error processing {file_path.name}: {e}",
             }
 
     def process_new_documents(self) -> Dict[str, Any]:
         """Process only new or modified documents since the last run."""
-        LAST_RUN_FILE = Path(self.config.documents.folder_path) / ".last_incremental_run"
-        
+        LAST_RUN_FILE = (
+            Path(self.config.documents.folder_path) / ".last_incremental_run"
+        )
+
         try:
             # Get last run timestamp
             last_run_time = 0
             if LAST_RUN_FILE.exists():
                 try:
-                    with open(LAST_RUN_FILE, 'r') as f:
+                    with open(LAST_RUN_FILE, "r") as f:
                         data = json.load(f)
-                        last_run_time = data.get('timestamp', 0)
-                        self.logger.info(f"Last incremental run: {data.get('datetime', 'Unknown')}")
+                        last_run_time = data.get("timestamp", 0)
+                        self.logger.info(
+                            f"Last incremental run: {data.get('datetime', 'Unknown')}"
+                        )
                 except (json.JSONDecodeError, IOError) as e:
                     self.logger.warning(f"Could not read last run file: {e}")
                     last_run_time = 0
@@ -409,17 +373,21 @@ class IngestionPipeline:
 
             # Check collection health first
             collection_status = self.check_collection()
-            if not collection_status.get('exists') or not collection_status.get('dimensions_match', True):
-                self.logger.warning("Collection health check failed, recommending full reindex")
+            if not collection_status.get("exists") or not collection_status.get(
+                "dimensions_match", True
+            ):
+                self.logger.warning(
+                    "Collection health check failed, recommending full reindex"
+                )
                 return {
-                    'status': 'needs_reindex',
-                    'message': 'Collection does not exist or has dimension issues. Please run reindex_all.',
-                    'processed': 0,
-                    'updated': 0,
-                    'errors': 0,
-                    'total_files': 0,
-                    'candidates': 0,
-                    'skipped': 0
+                    "status": "needs_reindex",
+                    "message": "Collection does not exist or has dimension issues. Please run reindex_all.",
+                    "processed": 0,
+                    "updated": 0,
+                    "errors": 0,
+                    "total_files": 0,
+                    "candidates": 0,
+                    "skipped": 0,
                 }
 
             # Get all supported files
@@ -429,14 +397,14 @@ class IngestionPipeline:
             if not files:
                 self.logger.warning("No supported files found")
                 return {
-                    'status': 'success',
-                    'message': 'No supported files found',
-                    'processed': 0,
-                    'updated': 0,
-                    'errors': 0,
-                    'total_files': 0,
-                    'candidates': 0,
-                    'skipped': 0
+                    "status": "success",
+                    "message": "No supported files found",
+                    "processed": 0,
+                    "updated": 0,
+                    "errors": 0,
+                    "total_files": 0,
+                    "candidates": 0,
+                    "skipped": 0,
                 }
 
             # Find new or modified files
@@ -449,17 +417,19 @@ class IngestionPipeline:
             if not new_or_modified_files:
                 self.logger.info("No new or modified documents found")
                 return {
-                    'status': 'success', 
-                    'message': 'No new or modified documents found',
-                    'processed': 0,
-                    'updated': 0,
-                    'errors': 0,
-                    'total_files': len(files),
-                    'candidates': 0,
-                    'skipped': len(files)  # All files were skipped
+                    "status": "success",
+                    "message": "No new or modified documents found",
+                    "processed": 0,
+                    "updated": 0,
+                    "errors": 0,
+                    "total_files": len(files),
+                    "candidates": 0,
+                    "skipped": len(files),  # All files were skipped
                 }
 
-            self.logger.info(f"Processing {len(new_or_modified_files)} new or modified files...")
+            self.logger.info(
+                f"Processing {len(new_or_modified_files)} new or modified files..."
+            )
 
             processed = 0
             updated = 0
@@ -468,13 +438,15 @@ class IngestionPipeline:
             # Process each new/modified file
             for file_path in new_or_modified_files:
                 # Delete existing chunks for this document (if any)
-                relative_path = str(file_path.relative_to(self.config.documents.folder_path))
+                relative_path = str(
+                    file_path.relative_to(self.config.documents.folder_path)
+                )
                 source_url = f"file:{relative_path}"
                 self.vector_store.delete_document(source_url)
-                
+
                 # Process document using shared method
                 result = self._process_single_document(file_path)
-                if result['success']:
+                if result["success"]:
                     processed += 1
                 else:
                     errors += 1
@@ -482,27 +454,33 @@ class IngestionPipeline:
             # Update last run timestamp
             current_time = time.time()
             try:
-                with open(LAST_RUN_FILE, 'w') as f:
-                    json.dump({
-                        'timestamp': current_time,
-                        'datetime': datetime.fromtimestamp(current_time).isoformat()
-                    }, f, indent=2)
+                with open(LAST_RUN_FILE, "w") as f:
+                    json.dump(
+                        {
+                            "timestamp": current_time,
+                            "datetime": datetime.fromtimestamp(
+                                current_time
+                            ).isoformat(),
+                        },
+                        f,
+                        indent=2,
+                    )
             except IOError as e:
                 self.logger.warning(f"Could not update last run file: {e}")
 
             # Calculate skipped files (total files minus those that were modified)
             total_files = len(files)
             skipped = total_files - len(new_or_modified_files)
-            
+
             result = {
-                'status': 'success',
-                'message': f'Processed {processed} documents, {errors} errors',
-                'processed': processed,
-                'updated': updated,
-                'errors': errors,
-                'total_files': total_files,
-                'candidates': len(new_or_modified_files),
-                'skipped': skipped
+                "status": "success",
+                "message": f"Processed {processed} documents, {errors} errors",
+                "processed": processed,
+                "updated": updated,
+                "errors": errors,
+                "total_files": total_files,
+                "candidates": len(new_or_modified_files),
+                "skipped": skipped,
             }
 
             self.logger.info(f"Incremental processing complete: {result['message']}")
@@ -511,12 +489,12 @@ class IngestionPipeline:
         except Exception as e:
             self.logger.error(f"Error during incremental processing: {e}")
             return {
-                'status': 'error',
-                'message': f'Incremental processing failed: {e}',
-                'processed': 0,
-                'updated': 0,
-                'errors': 1,
-                'total_files': 0,
-                'candidates': 0,
-                'skipped': 0
+                "status": "error",
+                "message": f"Incremental processing failed: {e}",
+                "processed": 0,
+                "updated": 0,
+                "errors": 1,
+                "total_files": 0,
+                "candidates": 0,
+                "skipped": 0,
             }
