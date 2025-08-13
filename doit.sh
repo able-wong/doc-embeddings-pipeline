@@ -33,16 +33,16 @@ run_tests() {
 
 # Run linter (check only)
 run_lint() {
-    echo "🔍 Running ruff linter..."
-    ruff check .
-    echo "✅ Linting completed successfully!"
+    echo "🔍 Running ruff linter and format check..."
+    ruff check . && ruff format --check .
+    echo "✅ Linting and formatting checks completed successfully!"
 }
 
 # Run linter with auto-fix
 run_lint_fix() {
-    echo "🔧 Running ruff linter with auto-fix..."
-    ruff check --fix .
-    echo "✅ Linting and auto-fix completed successfully!"
+    echo "🔧 Running ruff linter with auto-fix and formatting..."
+    ruff check --fix . && ruff format .
+    echo "✅ Linting, auto-fix, and formatting completed successfully!"
 }
 
 # Show usage
@@ -53,8 +53,8 @@ show_usage() {
     echo ""
     echo "Commands:"
     echo "  test      Run all tests with pytest"
-    echo "  lint      Run ruff linter (check only)"
-    echo "  lint-fix  Run ruff linter with auto-fix"
+    echo "  lint      Run ruff linter and format check (matches CI)"
+    echo "  lint-fix  Run ruff linter with auto-fix and formatting"
     echo ""
     echo "Examples:"
     echo "  ./doit.sh test"

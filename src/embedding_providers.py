@@ -42,17 +42,10 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
     def generate_embedding(self, text: str) -> List[float]:
         """Generate embedding for a single text using Ollama."""
         url = f"{self.config.base_url}/api/embeddings"
-        payload = {
-            "model": self.config.model,
-            "prompt": text
-        }
+        payload = {"model": self.config.model, "prompt": text}
 
         try:
-            response = requests.post(
-                url,
-                json=payload,
-                timeout=self.config.timeout
-            )
+            response = requests.post(url, json=payload, timeout=self.config.timeout)
             response.raise_for_status()
 
             result = response.json()
@@ -85,7 +78,9 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
 
                 # Log progress for large batches
                 if (i + 1) % 10 == 0:
-                    self.logger.info(f"Generated embeddings for {i + 1}/{len(texts)} texts")
+                    self.logger.info(
+                        f"Generated embeddings for {i + 1}/{len(texts)} texts"
+                    )
 
                 # Small delay to avoid overwhelming Ollama
                 time.sleep(0.1)
@@ -117,7 +112,9 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
             model_names = [model.get("name", "").split(":")[0] for model in models]
 
             if self.config.model not in model_names:
-                self.logger.error(f"Model {self.config.model} not found in Ollama. Available models: {model_names}")
+                self.logger.error(
+                    f"Model {self.config.model} not found in Ollama. Available models: {model_names}"
+                )
                 return False
 
             # Test embedding generation
@@ -125,7 +122,9 @@ class OllamaEmbeddingProvider(EmbeddingProvider):
             if len(test_embedding) == 0:
                 return False
 
-            self.logger.info(f"Ollama connection successful. Model: {self.config.model}, Dimension: {len(test_embedding)}")
+            self.logger.info(
+                f"Ollama connection successful. Model: {self.config.model}, Dimension: {len(test_embedding)}"
+            )
             return True
 
         except Exception as e:
@@ -142,7 +141,9 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
         self._embedding_dimension = None
 
         if not config.gemini:
-            raise ValueError("Gemini configuration is required when using Gemini provider")
+            raise ValueError(
+                "Gemini configuration is required when using Gemini provider"
+            )
 
         self.gemini_config = config.gemini
 
@@ -151,15 +152,19 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             import google.generativeai as genai
 
             # Get API key from config or environment
-            api_key = self.gemini_config.api_key or os.getenv('GEMINI_API_KEY')
+            api_key = self.gemini_config.api_key or os.getenv("GEMINI_API_KEY")
             if not api_key:
-                raise ValueError("Gemini API key is required. Set it in config.yaml or GEMINI_API_KEY environment variable")
+                raise ValueError(
+                    "Gemini API key is required. Set it in config.yaml or GEMINI_API_KEY environment variable"
+                )
 
             genai.configure(api_key=api_key)
             self.genai = genai
 
         except ImportError:
-            raise ImportError("google-generativeai library is required for Gemini provider. Install with: pip install google-generativeai")
+            raise ImportError(
+                "google-generativeai library is required for Gemini provider. Install with: pip install google-generativeai"
+            )
 
     def generate_embedding(self, text: str) -> List[float]:
         """Generate embedding for a single text using Gemini."""
@@ -167,10 +172,10 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             response = self.genai.embed_content(
                 model=f"models/{self.gemini_config.model}",
                 content=text,
-                task_type="retrieval_document"
+                task_type="retrieval_document",
             )
 
-            embedding = response['embedding']
+            embedding = response["embedding"]
 
             # Cache dimension on first call
             if self._embedding_dimension is None:
@@ -193,7 +198,9 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
 
                 # Log progress for large batches
                 if (i + 1) % 10 == 0:
-                    self.logger.info(f"Generated embeddings for {i + 1}/{len(texts)} texts")
+                    self.logger.info(
+                        f"Generated embeddings for {i + 1}/{len(texts)} texts"
+                    )
 
                 # Small delay to respect rate limits
                 time.sleep(0.1)
@@ -221,7 +228,9 @@ class GeminiEmbeddingProvider(EmbeddingProvider):
             if len(test_embedding) == 0:
                 return False
 
-            self.logger.info(f"Gemini connection successful. Model: {self.gemini_config.model}, Dimension: {len(test_embedding)}")
+            self.logger.info(
+                f"Gemini connection successful. Model: {self.gemini_config.model}, Dimension: {len(test_embedding)}"
+            )
             return True
 
         except Exception as e:
@@ -248,10 +257,17 @@ class SentenceTransformersEmbeddingProvider(EmbeddingProvider):
         if self._model is None:
             try:
                 from sentence_transformers import SentenceTransformer
-                self._model = SentenceTransformer(self.st_config.model, device=self.st_config.device)
-                self.logger.info(f"Loaded Sentence Transformer model: {self.st_config.model} on {self.st_config.device}")
+
+                self._model = SentenceTransformer(
+                    self.st_config.model, device=self.st_config.device
+                )
+                self.logger.info(
+                    f"Loaded Sentence Transformer model: {self.st_config.model} on {self.st_config.device}"
+                )
             except ImportError:
-                raise ImportError("sentence-transformers library is required. Install with: pip install sentence-transformers")
+                raise ImportError(
+                    "sentence-transformers library is required. Install with: pip install sentence-transformers"
+                )
             except Exception as e:
                 self.logger.error(f"Failed to load Sentence Transformer model: {e}")
                 raise
@@ -262,7 +278,9 @@ class SentenceTransformersEmbeddingProvider(EmbeddingProvider):
         try:
             model = self._get_model()
             # Generate embedding and convert to list
-            embedding = model.encode(text, convert_to_tensor=False, normalize_embeddings=True)
+            embedding = model.encode(
+                text, convert_to_tensor=False, normalize_embeddings=True
+            )
             return embedding.tolist()
 
         except Exception as e:
@@ -274,7 +292,9 @@ class SentenceTransformersEmbeddingProvider(EmbeddingProvider):
         try:
             model = self._get_model()
             # Generate embeddings in batch for efficiency
-            embeddings = model.encode(texts, convert_to_tensor=False, normalize_embeddings=True, batch_size=32)
+            embeddings = model.encode(
+                texts, convert_to_tensor=False, normalize_embeddings=True, batch_size=32
+            )
             return embeddings.tolist()
 
         except Exception as e:
@@ -299,7 +319,9 @@ class SentenceTransformersEmbeddingProvider(EmbeddingProvider):
                 return False
 
             dimension = self.get_embedding_dimension()
-            self.logger.info(f"Sentence Transformers connection successful. Model: {self.st_config.model}, Dimension: {dimension}, Device: {self.st_config.device}")
+            self.logger.info(
+                f"Sentence Transformers connection successful. Model: {self.st_config.model}, Dimension: {dimension}, Device: {self.st_config.device}"
+            )
             return True
 
         except Exception as e:

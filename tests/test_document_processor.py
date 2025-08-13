@@ -15,7 +15,7 @@ def documents_config():
         folder_path="./test_documents",
         supported_extensions=[".txt", ".md"],
         chunk_size=100,
-        chunk_overlap=20
+        chunk_overlap=20,
     )
 
 
@@ -32,8 +32,12 @@ def temp_docs_folder():
         temp_path = Path(temp_dir)
 
         # Create test files
-        (temp_path / "test.txt").write_text("This is a test document with some content.")
-        (temp_path / "test.md").write_text("# Test Markdown\n\nThis is markdown content.")
+        (temp_path / "test.txt").write_text(
+            "This is a test document with some content."
+        )
+        (temp_path / "test.md").write_text(
+            "# Test Markdown\n\nThis is markdown content."
+        )
         (temp_path / "ignored.pdf").write_text("This should be ignored.")
 
         yield temp_path
@@ -85,33 +89,38 @@ def test_extract_from_docx(document_processor):
     # Create a real file path with .docx extension
     import tempfile
     from pathlib import Path
-    with tempfile.NamedTemporaryFile(suffix='.docx', delete=False) as f:
+
+    with tempfile.NamedTemporaryFile(suffix=".docx", delete=False) as f:
         # Write some dummy content to make it a valid file
-        f.write(b'dummy docx content')
+        f.write(b"dummy docx content")
         test_file = Path(f.name)
 
     try:
         # Get the handler and mock its markitdown instance
         handler = document_processor.handler_registry.get_handler(test_file)
-        
+
         # Mock the markitdown convert method
         mock_result = Mock()
         mock_result.text_content = "Converted docx content"
-        
-        with patch.object(handler, 'markitdown') as mock_markitdown:
+
+        with patch.object(handler, "markitdown") as mock_markitdown:
             mock_markitdown.convert.return_value = mock_result
-            
+
             extracted_content = document_processor.extract_content_from_file(test_file)
 
             assert extracted_content.content == "Converted docx content"
-            assert extracted_content.extraction_method in ["markitdown_with_docx_properties", "markitdown_only", "markitdown_fallback"]
+            assert extracted_content.extraction_method in [
+                "markitdown_with_docx_properties",
+                "markitdown_only",
+                "markitdown_fallback",
+            ]
             # MarkItDown convert is called with the string path
             mock_markitdown.convert.assert_called_once_with(str(test_file))
     finally:
         test_file.unlink()
 
 
-@patch('src.handlers.html_handler.convert_to_markdown')
+@patch("src.handlers.html_handler.convert_to_markdown")
 def test_extract_from_html(mock_convert, document_processor, temp_docs_folder):
     """Test extracting text from .html file."""
     # Create HTML test file
@@ -125,7 +134,10 @@ def test_extract_from_html(mock_convert, document_processor, temp_docs_folder):
     extracted_content = document_processor.extract_content_from_file(html_file)
 
     assert extracted_content.content == "# Test\n\nContent"
-    assert extracted_content.extraction_method in ["html_to_markdown_with_meta", "html_to_markdown_latin1"]
+    assert extracted_content.extraction_method in [
+        "html_to_markdown_with_meta",
+        "html_to_markdown_latin1",
+    ]
     # The handler calls convert_to_markdown with just the HTML content
     mock_convert.assert_called_once_with(html_content)
 
@@ -134,18 +146,19 @@ def test_create_document_metadata(document_processor, temp_docs_folder):
     """Test creating document metadata."""
     document_processor.config.folder_path = str(temp_docs_folder)
     test_file = temp_docs_folder / "test.txt"
-    
+
     # Create ExtractedContent object like the handlers return
     from src.document_processor import ExtractedContent
+
     extracted_content = ExtractedContent(
-        content="Test content",
-        metadata={},
-        extraction_method="test"
+        content="Test content", metadata={}, extraction_method="test"
     )
 
     metadata = document_processor.create_document_metadata(test_file, extracted_content)
 
-    assert metadata.source_url == "file:test.txt"  # Now uses source_url with file: protocol
+    assert (
+        metadata.source_url == "file:test.txt"
+    )  # Now uses source_url with file: protocol
     assert metadata.file_extension == ".txt"
     assert isinstance(metadata.last_modified, datetime)
     assert metadata.content_hash is not None
@@ -181,12 +194,12 @@ def test_process_document_with_chunking():
         folder_path="./test",
         supported_extensions=[".txt"],
         chunk_size=20,  # Small chunk size to force splitting
-        chunk_overlap=5
+        chunk_overlap=5,
     )
     processor = DocumentProcessor(config)
 
     # Create a longer test file
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False) as f:
         content = "This is a long document. " * 10  # Repeat to make it long
         f.write(content)
         temp_path = Path(f.name)
@@ -227,7 +240,7 @@ def test_process_all_documents(document_processor, temp_docs_folder):
 def test_extract_text_from_file_unsupported_extension(document_processor):
     """Test extracting text from unsupported file extension."""
     mock_file = Mock()
-    mock_file.suffix = '.xyz'
+    mock_file.suffix = ".xyz"
 
     with pytest.raises(ValueError, match="No handler found for extension"):
         document_processor.extract_text_from_file(mock_file)
