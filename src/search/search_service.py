@@ -122,13 +122,17 @@ class SearchService:
             self.logger.warning(
                 "Sparse vectors not supported, falling back to semantic search"
             )
-            return self._search_semantic_with_vectors(query_embedding, limit, score_threshold)
+            return self._search_semantic_with_vectors(
+                query_embedding, limit, score_threshold
+            )
 
         if not self.sparse_provider:
             self.logger.warning(
                 "No sparse provider available, falling back to semantic search"
             )
-            return self._search_semantic_with_vectors(query_embedding, limit, score_threshold)
+            return self._search_semantic_with_vectors(
+                query_embedding, limit, score_threshold
+            )
 
         try:
             results = self.vector_store.search_hybrid_with_text(
@@ -147,7 +151,9 @@ class SearchService:
             self.logger.warning(
                 f"Hybrid search not supported: {e}. Falling back to semantic search"
             )
-            return self._search_semantic_with_vectors(query_embedding, limit, score_threshold)
+            return self._search_semantic_with_vectors(
+                query_embedding, limit, score_threshold
+            )
         except Exception as e:
             # For real errors, log and re-raise to expose the issue
             self.logger.error(f"Hybrid search failed with error: {e}")
@@ -184,7 +190,9 @@ class SearchService:
             )
         else:
             self.logger.debug("Using semantic search (sparse vectors not available)")
-            return self._search_semantic_with_vectors(query_embedding, limit, score_threshold)
+            return self._search_semantic_with_vectors(
+                query_embedding, limit, score_threshold
+            )
 
     def search_multi_strategy(
         self,
@@ -210,13 +218,17 @@ class SearchService:
         for strategy in strategies:
             try:
                 if strategy == "semantic":
-                    results[strategy] = self._search_semantic_with_vectors(query_embedding, limit)
+                    results[strategy] = self._search_semantic_with_vectors(
+                        query_embedding, limit
+                    )
                 elif strategy == "exact":
                     if (
                         self.vector_store.supports_sparse_vectors()
                         and self.sparse_provider
                     ):
-                        results[strategy] = self._search_exact_with_text(query_text, limit)
+                        results[strategy] = self._search_exact_with_text(
+                            query_text, limit
+                        )
                     else:
                         results[strategy] = []
                         self.logger.warning(f"Strategy '{strategy}' not available")
@@ -271,7 +283,9 @@ class SearchService:
         """
         try:
             query_embedding = self.embedding_provider.generate_embedding(query)
-            return self._search_semantic_with_vectors(query_embedding, limit, score_threshold)
+            return self._search_semantic_with_vectors(
+                query_embedding, limit, score_threshold
+            )
         except Exception as e:
             self.logger.error(f"Error generating embedding for semantic search: {e}")
             return []
@@ -351,7 +365,9 @@ class SearchService:
         """
         try:
             query_embedding = self.embedding_provider.generate_embedding(query)
-            return self._search_auto_with_vectors(query, query_embedding, limit, score_threshold)
+            return self._search_auto_with_vectors(
+                query, query_embedding, limit, score_threshold
+            )
         except Exception as e:
             self.logger.error(f"Error generating embedding for auto search: {e}")
             # Fallback to exact search if embedding fails
@@ -397,7 +413,7 @@ class SearchService:
 def create_search_service(
     vector_store: VectorStore,
     embedding_provider: EmbeddingProvider,
-    sparse_provider: Optional[SparseEmbeddingProvider] = None
+    sparse_provider: Optional[SparseEmbeddingProvider] = None,
 ) -> SearchService:
     """
     Factory function to create a search service.

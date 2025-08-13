@@ -30,7 +30,7 @@ class TestSearchServiceIntegration:
         mock_provider = Mock()
         mock_provider.generate_sparse_embedding.return_value = {
             "indices": [1, 2, 3],
-            "values": [0.5, 0.3, 0.2]
+            "values": [0.5, 0.3, 0.2],
         }
         return mock_provider
 
@@ -38,20 +38,18 @@ class TestSearchServiceIntegration:
         self, mock_vector_store, mock_embedding_provider
     ):
         """Test that search_semantic converts text to vectors correctly."""
-        search_service = SearchService(
-            mock_vector_store, mock_embedding_provider, None
-        )
+        search_service = SearchService(mock_vector_store, mock_embedding_provider, None)
 
-        results = search_service.search_semantic("test query", limit=5, score_threshold=0.7)
+        results = search_service.search_semantic(
+            "test query", limit=5, score_threshold=0.7
+        )
 
         # Verify embedding was generated from text
         mock_embedding_provider.generate_embedding.assert_called_once_with("test query")
-        
+
         # Verify vector search was called with generated embedding
-        mock_vector_store.search_dense.assert_called_once_with(
-            [0.1, 0.2, 0.3], 5, 0.7
-        )
-        
+        mock_vector_store.search_dense.assert_called_once_with([0.1, 0.2, 0.3], 5, 0.7)
+
         # Verify results
         assert len(results) == 1
         assert results[0]["id"] == "doc1"
@@ -65,21 +63,25 @@ class TestSearchServiceIntegration:
         mock_vector_store.search_sparse.return_value = [
             {"id": "doc2", "score": 0.9, "payload": {"chunk_text": "exact match"}}
         ]
-        
+
         search_service = SearchService(
             mock_vector_store, mock_embedding_provider, mock_sparse_provider
         )
 
-        results = search_service.search_exact("test query", limit=3, score_threshold=0.5)
+        results = search_service.search_exact(
+            "test query", limit=3, score_threshold=0.5
+        )
 
         # Verify sparse embedding was generated from text
-        mock_sparse_provider.generate_sparse_embedding.assert_called_once_with("test query")
-        
+        mock_sparse_provider.generate_sparse_embedding.assert_called_once_with(
+            "test query"
+        )
+
         # Verify sparse search was called with generated sparse vector
         mock_vector_store.search_sparse.assert_called_once_with(
             {"indices": [1, 2, 3], "values": [0.5, 0.3, 0.2]}, 3, 0.5
         )
-        
+
         # Verify results
         assert len(results) == 1
         assert results[0]["id"] == "doc2"
@@ -92,7 +94,7 @@ class TestSearchServiceIntegration:
         mock_vector_store.search_hybrid_with_text.return_value = [
             {"id": "doc3", "score": 0.95, "payload": {"chunk_text": "hybrid result"}}
         ]
-        
+
         search_service = SearchService(
             mock_vector_store, mock_embedding_provider, mock_sparse_provider
         )
@@ -103,12 +105,17 @@ class TestSearchServiceIntegration:
 
         # Verify embedding was generated from text
         mock_embedding_provider.generate_embedding.assert_called_once_with("test query")
-        
+
         # Verify hybrid search was called with text, embedding, and parameters
         mock_vector_store.search_hybrid_with_text.assert_called_once_with(
-            "test query", [0.1, 0.2, 0.3], "rrf", 10, score_threshold=0.8, dense_weight=0.7
+            "test query",
+            [0.1, 0.2, 0.3],
+            "rrf",
+            10,
+            score_threshold=0.8,
+            dense_weight=0.7,
         )
-        
+
         # Verify results
         assert len(results) == 1
         assert results[0]["id"] == "doc3"
@@ -122,7 +129,7 @@ class TestSearchServiceIntegration:
         mock_vector_store.search_hybrid_with_text.return_value = [
             {"id": "doc4", "score": 0.85, "payload": {"chunk_text": "auto result"}}
         ]
-        
+
         search_service = SearchService(
             mock_vector_store, mock_embedding_provider, mock_sparse_provider
         )
@@ -131,12 +138,12 @@ class TestSearchServiceIntegration:
 
         # Verify embedding was generated from text
         mock_embedding_provider.generate_embedding.assert_called_once_with("test query")
-        
+
         # Verify it chose RRF strategy for auto mode
         mock_vector_store.search_hybrid_with_text.assert_called_once_with(
             "test query", [0.1, 0.2, 0.3], "rrf", 8, score_threshold=0.6
         )
-        
+
         # Verify results
         assert len(results) == 1
         assert results[0]["id"] == "doc4"
@@ -146,11 +153,17 @@ class TestSearchServiceIntegration:
     ):
         """Test fallback behavior when embedding generation fails."""
         mock_vector_store.supports_sparse_vectors.return_value = True
-        mock_embedding_provider.generate_embedding.side_effect = Exception("Embedding failed")
+        mock_embedding_provider.generate_embedding.side_effect = Exception(
+            "Embedding failed"
+        )
         mock_vector_store.search_sparse.return_value = [
-            {"id": "fallback", "score": 0.7, "payload": {"chunk_text": "fallback result"}}
+            {
+                "id": "fallback",
+                "score": 0.7,
+                "payload": {"chunk_text": "fallback result"},
+            }
         ]
-        
+
         search_service = SearchService(
             mock_vector_store, mock_embedding_provider, mock_sparse_provider
         )
@@ -160,11 +173,13 @@ class TestSearchServiceIntegration:
 
         # Verify it tried to generate embedding
         mock_embedding_provider.generate_embedding.assert_called_once_with("test query")
-        
+
         # Verify it fell back to sparse search
-        mock_sparse_provider.generate_sparse_embedding.assert_called_once_with("test query")
+        mock_sparse_provider.generate_sparse_embedding.assert_called_once_with(
+            "test query"
+        )
         mock_vector_store.search_sparse.assert_called_once()
-        
+
         assert len(results) == 1
         assert results[0]["id"] == "fallback"
 
@@ -172,20 +187,20 @@ class TestSearchServiceIntegration:
         self, mock_vector_store, mock_embedding_provider
     ):
         """Test that semantic search returns empty list on embedding error."""
-        mock_embedding_provider.generate_embedding.side_effect = Exception("Embedding failed")
-        
-        search_service = SearchService(
-            mock_vector_store, mock_embedding_provider, None
+        mock_embedding_provider.generate_embedding.side_effect = Exception(
+            "Embedding failed"
         )
+
+        search_service = SearchService(mock_vector_store, mock_embedding_provider, None)
 
         results = search_service.search_semantic("test query")
 
         # Verify it tried to generate embedding
         mock_embedding_provider.generate_embedding.assert_called_once_with("test query")
-        
+
         # Should return empty list on error
         assert results == []
-        
+
         # Vector search should not be called
         mock_vector_store.search_dense.assert_not_called()
 
@@ -196,7 +211,7 @@ class TestSearchServiceConstructorValidation:
     def test_requires_embedding_provider(self):
         """Test that SearchService requires embedding_provider parameter."""
         mock_vector_store = Mock()
-        
+
         # Should raise TypeError if embedding_provider is not provided
         with pytest.raises(TypeError, match="missing.*embedding_provider"):
             SearchService(mock_vector_store)
@@ -206,10 +221,12 @@ class TestSearchServiceConstructorValidation:
         mock_vector_store = Mock()
         mock_embedding_provider = Mock()
         mock_sparse_provider = Mock()
-        
+
         # Should not raise any exception
-        service = SearchService(mock_vector_store, mock_embedding_provider, mock_sparse_provider)
-        
+        service = SearchService(
+            mock_vector_store, mock_embedding_provider, mock_sparse_provider
+        )
+
         assert service.vector_store is mock_vector_store
         assert service.embedding_provider is mock_embedding_provider
         assert service.sparse_provider is mock_sparse_provider
