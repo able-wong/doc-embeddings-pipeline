@@ -251,42 +251,6 @@ def test_add_or_update_document_file_not_found(
     assert result is False
 
 
-@patch("src.pipeline.create_vector_store")
-@patch("src.pipeline.create_embedding_provider")
-@patch("src.pipeline.DocumentProcessor")
-def test_search_documents(
-    mock_doc_processor, mock_embedding_provider, mock_vector_store, test_config
-):
-    """Test document searching."""
-    # Mock the components
-    mock_doc_processor.return_value = Mock()
-
-    mock_embedding = Mock()
-    mock_embedding.generate_embedding.return_value = [0.1, 0.2, 0.3]
-    mock_embedding_provider.return_value = mock_embedding
-
-    mock_vector = Mock()
-    mock_vector.search.return_value = [
-        {
-            "score": 0.95,
-            "payload": {
-                "file_path": "test.txt",
-                "filename": "test.txt",
-                "chunk_text": "Test chunk",
-                "chunk_index": 0,
-            },
-        }
-    ]
-    mock_vector_store.return_value = mock_vector
-
-    pipeline = IngestionPipeline(test_config)
-    results = pipeline.search_documents("test query", limit=5)
-
-    assert len(results) == 1
-    assert results[0]["score"] == 0.95
-    assert results[0]["filename"] == "test.txt"
-    mock_embedding.generate_embedding.assert_called_once_with("test query")
-    mock_vector.search.assert_called_once_with([0.1, 0.2, 0.3], 5)
 
 
 @patch("src.pipeline.create_vector_store")

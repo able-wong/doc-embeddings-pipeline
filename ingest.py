@@ -198,48 +198,63 @@ def search(
         click.echo(f"Dense weight: {dense_weight}")
     click.echo("-" * 80)
 
-    try:
-        # Choose search method based on strategy - much simpler now!
-        if strategy == "auto":
-            results_raw = pipeline.search_service.search_auto(
+    # Define strategy dispatch map with capabilities and method calls
+    strategy_map = {
+        "auto": {
+            "method": lambda: pipeline.search_service.search_auto(
                 query, limit, score_threshold=threshold
-            )
-        elif strategy == "semantic":
-            results_raw = pipeline.search_service.search_semantic(
+            ),
+            "capability": "semantic_search",  # Auto always available if semantic works
+            "error_msg": "Auto search not available",
+        },
+        "semantic": {
+            "method": lambda: pipeline.search_service.search_semantic(
                 query, limit, score_threshold=threshold
-            )
-        elif strategy == "exact":
-            if not capabilities["exact_phrase_search"]:
-                click.echo(
-                    "❌ Exact phrase search not available (requires sparse vectors)",
-                    err=True,
-                )
-                return
-            results_raw = pipeline.search_service.search_exact(
+            ),
+            "capability": "semantic_search",
+            "error_msg": "Semantic search not available",
+        },
+        "exact": {
+            "method": lambda: pipeline.search_service.search_exact(
                 query, limit, score_threshold=threshold
-            )
-        elif strategy == "hybrid_rrf":
-            if not capabilities["hybrid_search"]:
-                click.echo(
-                    "❌ Hybrid search not available (requires sparse vectors)", err=True
-                )
-                return
-            results_raw = pipeline.search_service.search_hybrid(
+            ),
+            "capability": "exact_phrase_search",
+            "error_msg": "Exact phrase search not available (requires sparse vectors)",
+        },
+        "hybrid_rrf": {
+            "method": lambda: pipeline.search_service.search_hybrid(
                 query, "rrf", limit, score_threshold=threshold
-            )
-        elif strategy == "hybrid_weighted":
-            if not capabilities["hybrid_search"]:
-                click.echo(
-                    "❌ Hybrid search not available (requires sparse vectors)", err=True
-                )
-                return
-            results_raw = pipeline.search_service.search_hybrid(
+            ),
+            "capability": "hybrid_search",
+            "error_msg": "Hybrid search not available (requires sparse vectors)",
+        },
+        "hybrid_weighted": {
+            "method": lambda: pipeline.search_service.search_hybrid(
                 query,
                 "weighted",
                 limit,
                 score_threshold=threshold,
                 dense_weight=dense_weight,
-            )
+            ),
+            "capability": "hybrid_search",
+            "error_msg": "Hybrid search not available (requires sparse vectors)",
+        },
+    }
+
+    try:
+        # Get the selected strategy configuration
+        selected_strategy = strategy_map.get(strategy)
+        if not selected_strategy:
+            click.echo(f"❌ Unknown strategy: {strategy}", err=True)
+            return
+
+        # Check if the strategy is available
+        if not capabilities.get(selected_strategy["capability"]):
+            click.echo(f"❌ {selected_strategy['error_msg']}", err=True)
+            return
+
+        # Execute the strategy
+        results_raw = selected_strategy["method"]()
 
         # Convert to expected format (threshold filtering done by database)
         results = []

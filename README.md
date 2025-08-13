@@ -289,6 +289,7 @@ The article fetcher provides granular control over what content is included in t
 | `--summary --analysis` | Summary + Insights + Analysis only | Complete AI analysis without original content |
 
 **Analysis sections include:**
+
 - Source reliability assessment
 - Fact-checking analysis  
 - Citations and references
@@ -308,11 +309,13 @@ The article fetcher provides granular control over what content is included in t
 ### Output Formats
 
 **JSON Format** (for vector database ingestion):
+
 - Structured metadata with AI analysis in markdown format
 - Compatible with existing pipeline for semantic search
 - Includes original content for full-text indexing
 
 **HTML Format** (for publishing and copyright compliance):
+
 - Clean, styled HTML with semantic structure
 - Custom meta tags for metadata preservation
 - Only AI analysis content (no original article text)
@@ -549,6 +552,7 @@ The pipeline supports both **dense-only** and **hybrid** (dense + sparse) vector
 ### Collection Types
 
 #### Dense-Only Collection (Default)
+
 ```json
 {
   "vectors_config": {
@@ -559,6 +563,7 @@ The pipeline supports both **dense-only** and **hybrid** (dense + sparse) vector
 ```
 
 #### Hybrid Collection (Dense + Sparse Vectors)
+
 ```json
 {
   "vectors_config": {
@@ -580,6 +585,7 @@ The pipeline supports both **dense-only** and **hybrid** (dense + sparse) vector
 ### Vector Storage Structure
 
 #### Dense-Only Points
+
 ```json
 {
   "id": "chunk_id",
@@ -589,6 +595,7 @@ The pipeline supports both **dense-only** and **hybrid** (dense + sparse) vector
 ```
 
 #### Hybrid Points (Dense + Sparse)
+
 ```json
 {
   "id": "chunk_id",
@@ -608,10 +615,12 @@ The pipeline supports both **dense-only** and **hybrid** (dense + sparse) vector
 The pipeline automatically creates these indices for optimal query performance:
 
 #### Vector Indices
+
 - **Dense vector index** - HNSW index for semantic similarity search
 - **Sparse vector index** - Inverted index for exact phrase matching (hybrid collections only)
 
 #### Payload Indices  
+
 - **`tags`** - KEYWORD schema (array of strings for categorical filtering)
 - **`author`** - KEYWORD schema (exact matching for author queries)
 - **`title`** - KEYWORD schema (exact matching for document titles)
@@ -649,9 +658,10 @@ The pipeline supports pre-structured JSON files with the following format:
 
 ## 🔍 Search Capabilities
 
-The pipeline supports multiple search modes depending on your configuration:
+Even though this is a ingestion pipeline, it provides comprehensive search functionality to verify your vector database is properly populated and functional. Multiple search modes are supported depending on your configuration:
 
 ### Dense Vector Search (Default)
+
 Semantic similarity search using sentence transformers, Gemini, or Ollama embeddings:
 
 ```python
@@ -668,6 +678,7 @@ results = client.search(
 ```
 
 ### Sparse Vector Search (Exact Phrase Matching)
+
 When `sparse_embedding` is configured, enables exact phrase and keyword matching:
 
 ```python
@@ -689,6 +700,7 @@ results = client.search(
 ```
 
 ### Hybrid Search (Best of Both Worlds)
+
 Combines semantic similarity with exact phrase matching for optimal relevance:
 
 ```python
@@ -739,6 +751,7 @@ python3 ingest.py search "embeddings" --format detailed    # Full details (defau
 ### RAG Integration Examples
 
 #### Python (Qdrant Client)
+
 ```python
 from qdrant_client import QdrantClient
 
@@ -757,6 +770,7 @@ context_chunks = [hit.payload["chunk_text"] for hit in results]
 ```
 
 #### TypeScript/JavaScript
+
 ```typescript
 import { QdrantClient } from '@qdrant/js-client-rest';
 
@@ -776,6 +790,7 @@ const contextChunks = results.map(hit => hit.payload.chunk_text);
 ```
 
 #### REST API
+
 ```bash
 # Direct API access for any language
 curl -X POST "http://localhost:6333/collections/documents/points/search" \

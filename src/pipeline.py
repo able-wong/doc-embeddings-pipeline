@@ -255,56 +255,6 @@ class IngestionPipeline:
             self.logger.error(f"Error during reindexing: {e}")
             return False
 
-    def search_documents(
-        self, query: str, limit: int = 10, threshold: float = 0.7
-    ) -> List[Dict[str, Any]]:
-        """Search documents with a query string."""
-        try:
-            # Generate query embedding
-            query_embedding = self.embedding_provider.generate_embedding(query)
-
-            # Search vector store
-            results = self.vector_store.search(query_embedding, limit)
-
-            # Format and filter results
-            formatted_results = []
-            for result in results:
-                score = result.get("score", 0)
-
-                # Apply threshold filter
-                if score < threshold:
-                    continue
-
-                payload = result.get("payload", {})
-                # Try to get filename from payload, else parse from source_url
-                filename = payload.get("filename")
-                if not filename:
-                    source_url = payload.get("source_url", "")
-                    # If source_url is like 'file:some/path/file.txt', extract last part
-                    if source_url.startswith("file:"):
-                        filename = source_url.split(":", 1)[1].split("/")[-1]
-                    else:
-                        filename = ""
-
-                formatted_result = {
-                    "score": score,
-                    "source_url": payload.get("source_url", ""),
-                    "filename": filename,
-                    "chunk_text": payload.get("chunk_text", ""),
-                    "chunk_index": payload.get("chunk_index", 0),
-                    # Include new metadata fields
-                    "author": payload.get("author"),
-                    "title": payload.get("title"),
-                    "publication_date": payload.get("publication_date"),
-                    "tags": payload.get("tags", []),
-                }
-                formatted_results.append(formatted_result)
-
-            return formatted_results
-
-        except Exception as e:
-            self.logger.error(f"Error searching documents: {e}")
-            return []
 
     def list_documents(self) -> List[Dict[str, Any]]:
         """List all supported documents in the documents folder."""
