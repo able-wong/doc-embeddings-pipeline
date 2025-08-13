@@ -255,7 +255,6 @@ class IngestionPipeline:
             self.logger.error(f"Error during reindexing: {e}")
             return False
 
-
     def list_documents(self) -> List[Dict[str, Any]]:
         """List all supported documents in the documents folder."""
         try:

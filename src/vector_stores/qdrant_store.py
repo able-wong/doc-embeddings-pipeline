@@ -187,9 +187,17 @@ class QdrantVectorStore(VectorStore):
         try:
             from qdrant_client.models import PointStruct, SparseVector
 
+            # Generate sparse embeddings in batch if sparse vectors are supported
+            sparse_embeddings = None
+            if self.supports_sparse_vectors():
+                chunk_texts = [chunk.chunk_text for chunk in chunks]
+                sparse_embeddings = self._sparse_provider.generate_sparse_embeddings(
+                    chunk_texts
+                )
+
             # Prepare points for insertion
             points = []
-            for chunk, embedding in zip(chunks, embeddings):
+            for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
                 payload = {
                     "chunk_text": chunk.chunk_text,
                     "original_text": chunk.original_text,
@@ -211,10 +219,8 @@ class QdrantVectorStore(VectorStore):
 
                 # Prepare vector data
                 if self.supports_sparse_vectors():
-                    # Generate sparse vector for the chunk text
-                    sparse_embedding = self._sparse_provider.generate_sparse_embedding(
-                        chunk.chunk_text
-                    )
+                    # Use pre-generated sparse embedding from batch
+                    sparse_embedding = sparse_embeddings[i]
 
                     vector_data = {
                         "dense": embedding,

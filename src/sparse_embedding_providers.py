@@ -12,6 +12,17 @@ class SparseEmbeddingProvider(ABC):
         """Generate sparse embedding for the given text."""
         pass
 
+    def generate_sparse_embeddings(
+        self, texts: List[str]
+    ) -> List[Dict[str, List[int]]]:
+        """
+        Generate sparse embeddings for multiple texts efficiently.
+
+        Default implementation falls back to single-text processing.
+        Providers should override this for better batch performance.
+        """
+        return [self.generate_sparse_embedding(text) for text in texts]
+
     @abstractmethod
     def test_connection(self) -> bool:
         """Test if the provider is available and working."""
@@ -129,6 +140,92 @@ class SpladeProvider(SparseEmbeddingProvider):
         except Exception as e:
             self.logger.error(f"Error generating sparse embedding: {e}")
             return {"indices": [], "values": []}
+
+    def generate_sparse_embeddings(
+        self, texts: List[str]
+    ) -> List[Dict[str, List[int]]]:
+        """Generate sparse embeddings for multiple texts efficiently using batch processing."""
+        if not texts:
+            return []
+
+        # Filter out empty texts and keep track of original positions
+        valid_texts = []
+        valid_indices = []
+        for i, text in enumerate(texts):
+            if text and text.strip():
+                valid_texts.append(text)
+                valid_indices.append(i)
+
+        if not valid_texts:
+            return [{"indices": [], "values": []} for _ in texts]
+
+        try:
+            import torch
+
+            # Tokenize all texts in batch
+            inputs = self._tokenizer(
+                valid_texts,
+                return_tensors="pt",
+                truncation=True,
+                padding=True,
+                max_length=512,
+            )
+
+            # Move to appropriate device
+            if self.device != "cpu":
+                inputs = {k: v.to(self.device) for k, v in inputs.items()}
+
+            # Generate sparse representations for all texts at once
+            with torch.no_grad():
+                outputs = self._model(**inputs)
+                logits = outputs.logits
+
+                # Apply ReLU and log(1 + x) transformation as per SPLADE
+                sparse_repr = torch.log(1 + torch.relu(logits))
+
+                # Take max over sequence length for each text
+                sparse_vectors = torch.max(sparse_repr, dim=1)[0]
+
+                # Move back to CPU for processing
+                if self.device != "cpu":
+                    sparse_vectors = sparse_vectors.cpu()
+
+                # Process each sparse vector
+                threshold = 0.01
+                results = []
+
+                for sparse_vector in sparse_vectors:
+                    # Filter to non-zero values with threshold
+                    non_zero_mask = sparse_vector > threshold
+                    non_zero_indices = torch.nonzero(non_zero_mask).squeeze().tolist()
+
+                    # Handle single index case
+                    if isinstance(non_zero_indices, int):
+                        non_zero_indices = [non_zero_indices]
+                    elif len(non_zero_indices) == 0:
+                        results.append({"indices": [], "values": []})
+                        continue
+
+                    non_zero_values = sparse_vector[non_zero_indices].tolist()
+                    results.append(
+                        {"indices": non_zero_indices, "values": non_zero_values}
+                    )
+
+                # Create final results array with empty embeddings for invalid texts
+                final_results = [{"indices": [], "values": []} for _ in texts]
+                for i, result in enumerate(results):
+                    final_results[valid_indices[i]] = result
+
+                self.logger.debug(
+                    f"Generated {len(valid_texts)} sparse vectors in batch (out of {len(texts)} total)"
+                )
+
+                return final_results
+
+        except Exception as e:
+            self.logger.error(f"Error generating batch sparse embeddings: {e}")
+            # Fallback to individual processing
+            return super().generate_sparse_embeddings(texts)
 
     def test_connection(self) -> bool:
         """Test if SPLADE model is loaded and working."""

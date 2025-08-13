@@ -251,8 +251,6 @@ def test_add_or_update_document_file_not_found(
     assert result is False
 
 
-
-
 @patch("src.pipeline.create_vector_store")
 @patch("src.pipeline.create_embedding_provider")
 @patch("src.pipeline.DocumentProcessor")
