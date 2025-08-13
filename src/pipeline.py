@@ -43,7 +43,7 @@ class IngestionPipeline:
 
         # Initialize search service
         self.search_service = create_search_service(
-            self.vector_store, self.sparse_provider
+            self.vector_store, self.embedding_provider, self.sparse_provider
         )
 
         # Setup logging

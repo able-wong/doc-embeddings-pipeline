@@ -2,6 +2,7 @@ from typing import List, Dict, Any, Optional
 import logging
 from ..vector_stores.base import VectorStore
 from ..sparse_embedding_providers import SparseEmbeddingProvider
+from ..embedding_providers import EmbeddingProvider
 
 
 class SearchService:
@@ -10,6 +11,7 @@ class SearchService:
     def __init__(
         self,
         vector_store: VectorStore,
+        embedding_provider: EmbeddingProvider,
         sparse_provider: Optional[SparseEmbeddingProvider] = None,
     ):
         """
@@ -17,24 +19,28 @@ class SearchService:
 
         Args:
             vector_store: Vector store implementation
+            embedding_provider: Embedding provider for text-to-vector conversion
             sparse_provider: Sparse embedding provider (optional)
         """
         self.vector_store = vector_store
+        self.embedding_provider = embedding_provider
         self.sparse_provider = sparse_provider
         self.logger = logging.getLogger(__name__)
 
-    def search_semantic(
+    def _search_semantic_with_vectors(
         self,
         query_embedding: List[float],
         limit: int = 10,
         score_threshold: float = None,
     ) -> List[Dict[str, Any]]:
         """
-        Perform semantic similarity search using dense vectors.
+        Private: Perform semantic similarity search using dense vectors.
+        Use search_semantic() instead for public API.
 
         Args:
             query_embedding: Dense vector representation of the query
             limit: Maximum number of results to return
+            score_threshold: Minimum score threshold for results
 
         Returns:
             List of search results with scores and payloads
@@ -49,15 +55,17 @@ class SearchService:
             self.logger.error(f"Error in semantic search: {e}")
             return []
 
-    def search_exact(
+    def _search_exact_with_text(
         self, query_text: str, limit: int = 10, score_threshold: float = None
     ) -> List[Dict[str, Any]]:
         """
-        Perform exact phrase matching using sparse vectors.
+        Private: Perform exact phrase matching using sparse vectors.
+        Use search_exact() instead for public API.
 
         Args:
             query_text: Text query to search for
             limit: Maximum number of results to return
+            score_threshold: Minimum score threshold for results
 
         Returns:
             List of search results with scores and payloads
@@ -86,7 +94,7 @@ class SearchService:
             self.logger.error(f"Error in exact phrase search: {e}")
             return []
 
-    def search_hybrid(
+    def _search_hybrid_with_vectors(
         self,
         query_text: str,
         query_embedding: List[float],
@@ -96,13 +104,15 @@ class SearchService:
         **kwargs,
     ) -> List[Dict[str, Any]]:
         """
-        Perform hybrid search combining semantic similarity and exact phrase matching.
+        Private: Perform hybrid search combining semantic similarity and exact phrase matching.
+        Use search_hybrid() instead for public API.
 
         Args:
             query_text: Text query for sparse vector generation
             query_embedding: Dense vector representation of the query
             strategy: Fusion strategy ("rrf", "weighted")
             limit: Maximum number of results to return
+            score_threshold: Minimum score threshold for results
             **kwargs: Additional arguments (e.g., dense_weight for weighted strategy)
 
         Returns:
@@ -112,13 +122,13 @@ class SearchService:
             self.logger.warning(
                 "Sparse vectors not supported, falling back to semantic search"
             )
-            return self.search_semantic(query_embedding, limit, score_threshold)
+            return self._search_semantic_with_vectors(query_embedding, limit, score_threshold)
 
         if not self.sparse_provider:
             self.logger.warning(
                 "No sparse provider available, falling back to semantic search"
             )
-            return self.search_semantic(query_embedding, limit, score_threshold)
+            return self._search_semantic_with_vectors(query_embedding, limit, score_threshold)
 
         try:
             results = self.vector_store.search_hybrid_with_text(
@@ -137,13 +147,13 @@ class SearchService:
             self.logger.warning(
                 f"Hybrid search not supported: {e}. Falling back to semantic search"
             )
-            return self.search_semantic(query_embedding, limit, score_threshold)
+            return self._search_semantic_with_vectors(query_embedding, limit, score_threshold)
         except Exception as e:
             # For real errors, log and re-raise to expose the issue
             self.logger.error(f"Hybrid search failed with error: {e}")
             raise
 
-    def search_auto(
+    def _search_auto_with_vectors(
         self,
         query_text: str,
         query_embedding: List[float],
@@ -151,12 +161,14 @@ class SearchService:
         score_threshold: float = None,
     ) -> List[Dict[str, Any]]:
         """
-        Automatically choose the best search strategy based on available capabilities.
+        Private: Automatically choose the best search strategy based on available capabilities.
+        Use search_auto() instead for public API.
 
         Args:
             query_text: Text query
             query_embedding: Dense vector representation
             limit: Maximum number of results to return
+            score_threshold: Minimum score threshold for results
 
         Returns:
             List of search results using the best available strategy
@@ -167,12 +179,12 @@ class SearchService:
                 "rrf" if self.vector_store.supports_native_fusion() else "weighted"
             )
             self.logger.debug(f"Using hybrid search with {strategy} strategy")
-            return self.search_hybrid(
+            return self._search_hybrid_with_vectors(
                 query_text, query_embedding, strategy, limit, score_threshold
             )
         else:
             self.logger.debug("Using semantic search (sparse vectors not available)")
-            return self.search_semantic(query_embedding, limit, score_threshold)
+            return self._search_semantic_with_vectors(query_embedding, limit, score_threshold)
 
     def search_multi_strategy(
         self,
@@ -198,13 +210,13 @@ class SearchService:
         for strategy in strategies:
             try:
                 if strategy == "semantic":
-                    results[strategy] = self.search_semantic(query_embedding, limit)
+                    results[strategy] = self._search_semantic_with_vectors(query_embedding, limit)
                 elif strategy == "exact":
                     if (
                         self.vector_store.supports_sparse_vectors()
                         and self.sparse_provider
                     ):
-                        results[strategy] = self.search_exact(query_text, limit)
+                        results[strategy] = self._search_exact_with_text(query_text, limit)
                     else:
                         results[strategy] = []
                         self.logger.warning(f"Strategy '{strategy}' not available")
@@ -213,7 +225,7 @@ class SearchService:
                         self.vector_store.supports_sparse_vectors()
                         and self.sparse_provider
                     ):
-                        results[strategy] = self.search_hybrid(
+                        results[strategy] = self._search_hybrid_with_vectors(
                             query_text, query_embedding, "rrf", limit
                         )
                     else:
@@ -224,7 +236,7 @@ class SearchService:
                         self.vector_store.supports_sparse_vectors()
                         and self.sparse_provider
                     ):
-                        results[strategy] = self.search_hybrid(
+                        results[strategy] = self._search_hybrid_with_vectors(
                             query_text, query_embedding, "weighted", limit
                         )
                     else:
@@ -238,6 +250,115 @@ class SearchService:
                 results[strategy] = []
 
         return results
+
+    # Public text-only interface
+    def search_semantic(
+        self,
+        query: str,
+        limit: int = 10,
+        score_threshold: float = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Perform semantic similarity search using text query.
+
+        Args:
+            query: Text query to search for
+            limit: Maximum number of results to return
+            score_threshold: Minimum score threshold for results
+
+        Returns:
+            List of search results with scores and payloads
+        """
+        try:
+            query_embedding = self.embedding_provider.generate_embedding(query)
+            return self._search_semantic_with_vectors(query_embedding, limit, score_threshold)
+        except Exception as e:
+            self.logger.error(f"Error generating embedding for semantic search: {e}")
+            return []
+
+    def search_exact(
+        self,
+        query: str,
+        limit: int = 10,
+        score_threshold: float = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Perform exact phrase matching search using text query.
+
+        Args:
+            query: Text query to search for
+            limit: Maximum number of results to return
+            score_threshold: Minimum score threshold for results
+
+        Returns:
+            List of search results with scores and payloads
+
+        Raises:
+            NotImplementedError: If sparse vectors are not supported
+        """
+        return self._search_exact_with_text(query, limit, score_threshold)
+
+    def search_hybrid(
+        self,
+        query: str,
+        strategy: str = "rrf",
+        limit: int = 10,
+        score_threshold: float = None,
+        **kwargs,
+    ) -> List[Dict[str, Any]]:
+        """
+        Perform hybrid search combining semantic similarity and exact phrase matching.
+
+        Args:
+            query: Text query to search for
+            strategy: Fusion strategy ("rrf", "weighted")
+            limit: Maximum number of results to return
+            score_threshold: Minimum score threshold for results
+            **kwargs: Additional arguments (e.g., dense_weight for weighted strategy)
+
+        Returns:
+            List of fused search results with scores and payloads
+        """
+        try:
+            query_embedding = self.embedding_provider.generate_embedding(query)
+            return self._search_hybrid_with_vectors(
+                query, query_embedding, strategy, limit, score_threshold, **kwargs
+            )
+        except Exception as e:
+            self.logger.error(f"Error generating embedding for hybrid search: {e}")
+            # Fallback to exact search if embedding fails
+            try:
+                return self._search_exact_with_text(query, limit, score_threshold)
+            except Exception:
+                return []
+
+    def search_auto(
+        self,
+        query: str,
+        limit: int = 10,
+        score_threshold: float = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        Automatically choose the best search strategy based on available capabilities.
+
+        Args:
+            query: Text query to search for
+            limit: Maximum number of results to return
+            score_threshold: Minimum score threshold for results
+
+        Returns:
+            List of search results using the best available strategy
+        """
+        try:
+            query_embedding = self.embedding_provider.generate_embedding(query)
+            return self._search_auto_with_vectors(query, query_embedding, limit, score_threshold)
+        except Exception as e:
+            self.logger.error(f"Error generating embedding for auto search: {e}")
+            # Fallback to exact search if embedding fails
+            try:
+                return self._search_exact_with_text(query, limit, score_threshold)
+            except Exception:
+                return []
 
     def get_capabilities(self) -> Dict[str, bool]:
         """
@@ -274,16 +395,19 @@ class SearchService:
 
 
 def create_search_service(
-    vector_store: VectorStore, sparse_provider: Optional[SparseEmbeddingProvider] = None
+    vector_store: VectorStore,
+    embedding_provider: EmbeddingProvider,
+    sparse_provider: Optional[SparseEmbeddingProvider] = None
 ) -> SearchService:
     """
     Factory function to create a search service.
 
     Args:
         vector_store: Vector store implementation
+        embedding_provider: Embedding provider for text-to-vector conversion
         sparse_provider: Optional sparse embedding provider
 
     Returns:
         Configured SearchService instance
     """
-    return SearchService(vector_store, sparse_provider)
+    return SearchService(vector_store, embedding_provider, sparse_provider)

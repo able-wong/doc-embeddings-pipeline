@@ -198,18 +198,15 @@ def search(
         click.echo(f"Dense weight: {dense_weight}")
     click.echo("-" * 80)
 
-    # Generate embedding for advanced search strategies
-    query_embedding = pipeline.embedding_provider.generate_embedding(query)
-
     try:
-        # Choose search method based on strategy
+        # Choose search method based on strategy - much simpler now!
         if strategy == "auto":
             results_raw = pipeline.search_service.search_auto(
-                query, query_embedding, limit, score_threshold=threshold
+                query, limit, score_threshold=threshold
             )
         elif strategy == "semantic":
             results_raw = pipeline.search_service.search_semantic(
-                query_embedding, limit, score_threshold=threshold
+                query, limit, score_threshold=threshold
             )
         elif strategy == "exact":
             if not capabilities["exact_phrase_search"]:
@@ -228,7 +225,7 @@ def search(
                 )
                 return
             results_raw = pipeline.search_service.search_hybrid(
-                query, query_embedding, "rrf", limit, score_threshold=threshold
+                query, "rrf", limit, score_threshold=threshold
             )
         elif strategy == "hybrid_weighted":
             if not capabilities["hybrid_search"]:
@@ -238,7 +235,6 @@ def search(
                 return
             results_raw = pipeline.search_service.search_hybrid(
                 query,
-                query_embedding,
                 "weighted",
                 limit,
                 score_threshold=threshold,

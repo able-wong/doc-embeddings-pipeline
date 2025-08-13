@@ -24,11 +24,31 @@ check_venv() {
     echo "✅ Virtual environment detected: $VIRTUAL_ENV"
 }
 
-# Run tests
+# Run unit tests (excludes integration tests)
 run_tests() {
-    echo "🧪 Running tests..."
+    echo "🧪 Running unit tests..."
+    python -m pytest tests/ --ignore=tests/integration -v
+    echo "✅ Unit tests completed successfully!"
+}
+
+# Run integration tests (real API calls)
+run_integration_tests() {
+    echo "🔗 Running integration tests..."
+    if [ ! -d "tests/integration" ]; then
+        echo "❌ Integration tests directory not found"
+        echo "Integration tests require real API keys and running services."
+        echo "See tests/integration/README.md for setup instructions."
+        exit 1
+    fi
+    python -m pytest tests/integration/ -v
+    echo "✅ Integration tests completed successfully!"
+}
+
+# Run all tests (unit + integration)
+run_all_tests() {
+    echo "🧪 Running all tests (unit + integration)..."
     python -m pytest tests/ -v
-    echo "✅ Tests completed successfully!"
+    echo "✅ All tests completed successfully!"
 }
 
 # Run linter (check only)
@@ -52,14 +72,18 @@ show_usage() {
     echo "Usage: ./doit.sh [command]"
     echo ""
     echo "Commands:"
-    echo "  test      Run all tests with pytest"
-    echo "  lint      Run ruff linter and format check (matches CI)"
-    echo "  lint-fix  Run ruff linter with auto-fix and formatting"
+    echo "  test             Run unit tests only (default, matches CI)"
+    echo "  test-integration Run integration tests (requires real APIs)"
+    echo "  test-all         Run all tests (unit + integration)"
+    echo "  lint             Run ruff linter and format check (matches CI)"
+    echo "  lint-fix         Run ruff linter with auto-fix and formatting"
     echo ""
     echo "Examples:"
-    echo "  ./doit.sh test"
-    echo "  ./doit.sh lint"
-    echo "  ./doit.sh lint-fix"
+    echo "  ./doit.sh test               # Unit tests only"
+    echo "  ./doit.sh test-integration   # Integration tests only"
+    echo "  ./doit.sh test-all           # All tests"
+    echo "  ./doit.sh lint               # Check linting"
+    echo "  ./doit.sh lint-fix           # Fix linting issues"
     echo ""
     echo "Note: Virtual environment must be activated before running commands."
 }
@@ -72,6 +96,12 @@ main() {
     case "${1:-}" in
         "test")
             run_tests
+            ;;
+        "test-integration")
+            run_integration_tests
+            ;;
+        "test-all")
+            run_all_tests
             ;;
         "lint")
             run_lint
